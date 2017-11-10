@@ -165,7 +165,7 @@ The form evaluates to a blank `mole-node-literal' if
   "Create a new grammar object with TERMINALS and NONTERMINALS."
   (unless (cl-some (lambda (term) (eq 'whitespace (car term))) terminals)
     (push mole-default-whitespace-terminal terminals))
-  `(lexical-let (,@(mapcar 'car nonterminals) ,@(mapcar 'car terminals))
+  `(let (,@(mapcar 'car nonterminals) ,@(mapcar 'car terminals))
      ,@(mapcar (lambda (spec)
                  (cl-destructuring-bind (name args body) (mole-build-terminal spec)
                    `(setq ,name (lambda ,args ,body))))
