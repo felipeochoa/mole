@@ -1,0 +1,9 @@
+#+TITLE: Mole: Elisp packrat parser generator
+
+* What is this?
+  A library to generate parsers based on parsing expression
+  grammars. Using the =mole-create-grammar= macro, parsers for many
+  languages can easily be generated
+
+* License
+  This project is licensed under the MIT license.
