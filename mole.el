@@ -134,8 +134,7 @@
 
   (defun mole-build-zero-or-one (productions)
     "Return a form that evaluates to zero or one PRODUCTIONS instances."
-    (let ((item (cl-gensym))
-          (production-form (mole-build-sequence productions)))
+    (let ((production-form (mole-build-sequence productions)))
       `(mole-node-operator :name '? :children ,production-form)))
 
   (defun mole-build-or (productions)
