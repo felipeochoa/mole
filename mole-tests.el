@@ -13,7 +13,7 @@
   (ert-with-test-buffer (:name 'mole-builders-terminal)
     (insert "teeeest")
     (goto-char (point-min))
-    (let ((res (mole-terminal '(test "te+st"))))
+    (let ((res (mole-build-terminal '(test "te+st"))))
       (should (eq (car res) 'test))
       (should (funcall `(lambda ,@(cdr res))))
       (should (eq (point) (point-max)))
@@ -121,7 +121,7 @@
       (should (funcall func))
       (should (eq (point) (1+ (point-min)))))))
 
-(ert-deftest basic-grammar-test ()
+(ert-deftest mole-basic-grammar-test ()
   "Test a very simple expression grammar."
   (let ((g (mole-create-grammar
             ((whitespace "[ \t\n\f]*")
