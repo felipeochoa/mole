@@ -35,8 +35,6 @@
 
 (cl-defmethod mole-node-to-sexp ((node mole-node))
   "Convert NODE into a test-friendly sexp."
-  (message "literal: %S; operator: %S" (mole-node-literal-p node)
-           (mole-node-operator-p node))
   (cons (mole-node-name node)
         (cl-mapcan (lambda (child)
                      (if (mole-node-operator-p child)
