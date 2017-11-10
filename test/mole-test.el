@@ -7,7 +7,9 @@
 
 (require 'ert)
 (require 'ert-x)
-(require 'mole)
+(require 'f)
+
+(load (f-expand "mole" (f-parent (f-dirname (f-this-file)))))
 
 (ert-deftest mole-builders-terminal ()
   (ert-with-test-buffer (:name 'mole-builders-terminal)
@@ -135,4 +137,4 @@
                      (product (number "2") "*" (number "6")))))))
 
 (provide 'mole-tests)
-;;; mole-tests.el ends here
+;;; mole-test.el ends here
