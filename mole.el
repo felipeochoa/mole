@@ -95,7 +95,6 @@
         ('* (mole-build-zero-or-more (cdr production)))
         ('+ (mole-build-one-or-more (cdr production)))
         ('? (mole-build-zero-or-one (cdr production)))
-        (': (mole-build-build-sequence (cdr production)))
         ('?= (mole-build-lookahead (cdr production)))
         ('?! (mole-build-negative-lookahead (cdr production)))
         (t (error "Unknown production %S" production))))
