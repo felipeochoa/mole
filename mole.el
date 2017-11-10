@@ -1,5 +1,15 @@
-;;; mole --- Packrat parser generator  -*- lexical-binding: t -*-
+;;; mole.el --- Packrat parser generator  -*- lexical-binding: t -*-
+
+;; Copyright (C) 2017 Felipe Ochoa
+
+;; Author: Felipe Ochoa <felipe@fov.space>
+;; URL: https://github.com/felipeochoa/mole/
+;; Created: 10 Nov 2017
 ;; Package-Requires: ((emacs "24.4"))
+;; Version: 0.1
+;; Keywords: maint
+
+;; This file is not part of GNU Emacs.
 
 ;;; Commentary:
 
