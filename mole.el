@@ -101,9 +101,14 @@
      (t (error "Unknown production %S" production))))
 
   (defun mole-build-sequence (productions)
-    "Compile PRODUCTIONS into sequenced calls to each."
-    (if (= 1 (length productions))
-        (mole-build-production (car productions))
+    "Compile PRODUCTIONS into sequenced calls to each.
+The resulting form always evaluates to a list. If the sequence of
+productions failed, the list will be nil. Otherwise, it will
+have one `mole-node' for each item in productions"
+    (if (null (cdr productions))
+        (let ((res (cl-gensym))
+              (prod (mole-build-production (car productions))))
+          `(when-let ((,res ,prod)) (list ,res)))
       (let* ((block-name (cl-gensym)))
         `(cl-block ,block-name
            (list ,@(mapcar (lambda (prod)
