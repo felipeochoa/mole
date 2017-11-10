@@ -17,7 +17,16 @@
 
 (require 'eieio)
 (require 'cl-lib)
-(require 'subr-x)
+
+(defmacro mole-when-let (binding &rest body)
+  "Bind BINDING and evaluate BODY if true."
+  ;; Needed for commpat with 24.x
+  (declare (indent 1) (debug ((symbolp form) body)))
+  `(let (,binding)
+     (when ,(car binding)
+       ,@body)))
+
+
 
 (defclass mole-grammar ()
   ((terminals :initarg :terminals :accessor mole-grammar-terminals)
@@ -78,7 +87,7 @@
           (args (cdr spec))
           (children (cl-gensym)))
       (list name ()
-            `(when-let ((,children ,(mole-build-sequence args)))
+            `(mole-when-let (,children ,(mole-build-sequence args))
                (mole-node :name ',name :children ,children)))))
 
   (defun mole-build-production (production)
@@ -108,7 +117,7 @@ have one `mole-node' for each item in productions"
     (if (null (cdr productions))
         (let ((res (cl-gensym))
               (prod (mole-build-production (car productions))))
-          `(when-let ((,res ,prod)) (list ,res)))
+          `(mole-when-let ((,res ,prod)) (list ,res)))
       (let* ((block-name (cl-gensym)))
         `(cl-block ,block-name
            (list ,@(mapcar (lambda (prod)
@@ -190,9 +199,9 @@ The form evaluates to a blank `mole-node-literal' if
   "Attempt to parse GRAMMAR's PRODUCTION starting at point."
   (save-excursion
     (or
-     (when-let ((parser (assq production (mole-grammar-terminals grammar))))
+     (mole-when-let (parser (assq production (mole-grammar-terminals grammar)))
        (funcall (cdr parser)))
-     (when-let ((parser (assq production (mole-grammar-nonterminals grammar))))
+     (mole-when-let (parser (assq production (mole-grammar-nonterminals grammar)))
        (funcall (cdr parser)))
      (error "Production %S not defined in grammar" production))))
 
