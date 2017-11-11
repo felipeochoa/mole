@@ -26,6 +26,8 @@
      (when ,(car binding)
        ,@body)))
 
+
+
 (defclass mole-grammar ()
   ((terminals :initarg :terminals :accessor mole-grammar-terminals)
    (nonterminals :initarg :nonterminals :accessor mole-grammar-nonterminals)))
@@ -115,7 +117,7 @@ have one `mole-node' for each item in productions"
     (if (null (cdr productions))
         (let ((res (cl-gensym))
               (prod (mole-build-production (car productions))))
-          `(mole-when-let (,res ,prod) (list ,res)))
+          `(mole-when-let ((,res ,prod)) (list ,res)))
       (let* ((block-name (cl-gensym)))
         `(cl-block ,block-name
            (list ,@(mapcar (lambda (prod)
