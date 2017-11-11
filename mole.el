@@ -33,7 +33,7 @@
 (defclass mole-node-operator (mole-node) ()
   "Node class for *, +, etc.")
 
-(defmethod mole-node-to-sexp ((node mole-node))
+(cl-defmethod mole-node-to-sexp ((node mole-node))
   "Convert NODE into a test-friendly sexp."
   (cons (mole-node-name node)
         (cl-mapcan (lambda (child)
@@ -42,13 +42,13 @@
                        (list (mole-node-to-sexp child))))
                    (mole-node-children node))))
 
-(defmethod mole-node-to-sexp ((literal mole-node-literal))
+(cl-defmethod mole-node-to-sexp ((literal mole-node-literal))
   "Convert LITERAL into a test-friendly sexp."
   (if (slot-boundp literal 'name)
       (list (mole-node-name literal) (mole-node-literal-string literal))
    (mole-node-literal-string literal)))
 
-(defmethod mole-node-to-sexp ((op mole-node-operator))
+(cl-defmethod mole-node-to-sexp ((op mole-node-operator))
   "Convert OP into a test-friendly sexp."
   (mapcar 'mole-node-to-sexp (mole-node-children op)))
 
