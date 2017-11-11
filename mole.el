@@ -5,7 +5,7 @@
 ;; Author: Felipe Ochoa <felipe@fov.space>
 ;; URL: https://github.com/felipeochoa/mole/
 ;; Created: 10 Nov 2017
-;; Package-Requires: ((emacs "24.4"))
+;; Package-Requires: ((emacs "25.2"))
 ;; Version: 0.1
 ;; Keywords: maint
 

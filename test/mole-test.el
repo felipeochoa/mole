@@ -1,5 +1,5 @@
 ;;; mole-tests --- Tests for mole.js  -*- lexical-binding: t -*-
-;; Package-Requires: ((emacs "24.4"))
+;; Package-Requires: ((emacs "25.2") (f "0.19.0"))
 
 ;;; Commentary:
 
