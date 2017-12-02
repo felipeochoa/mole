@@ -7,6 +7,9 @@
 
 (require 'ert)
 (require 'ert-x)
+(require 'cl-lib)
+
+(cl-declaim (optimize (safety 3)))
 
 (load (let (file-name-handler-alist)
         (expand-file-name

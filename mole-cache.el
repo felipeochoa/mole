@@ -34,27 +34,46 @@ NUM-PRODS -- how many productions the grammar has.
 
 NUM-ENTRIES -- how many parse results are stored in here.
 
-DIRTY-START -- start (in old buffer coords) of changed buffer area
-
-DIRTY-END -- end (in old buffer coords) of changed buffer area
-
-DIRTY-DELTA -- net increase in characters in the dirty area"
+DIRTY -- a length-3 vector with [start end delta], indicating
+where the buffer is dirty (in old buffer coords) and the net
+increase in characters in the dirty area."
   (table (make-hash-table :test 'eq))
   (num-prods (error "NUM-PRODS is required"))
   (num-entries 0)
-  (dirty-start 0)
-  (dirty-end 0)
-  (dirty-delta 0))
+  (dirty (vector 0 0 0)))
+
+(defun mole-cache-dirty-start (cache)
+  "Return the start of the dirty region for CACHE, in old coords."
+  (aref (mole-cache-dirty cache) 0))
+
+(gv-define-setter mole-cache-dirty-start (value cache)
+  `(setf (aref (mole-cache-dirty ,cache) 0) ,value))
+
+(defun mole-cache-dirty-end (cache)
+  "Return the end of the dirty region for CACHE, in old coords."
+  (aref (mole-cache-dirty cache) 1))
+
+(gv-define-setter mole-cache-dirty-end (value cache)
+  `(setf (aref (mole-cache-dirty ,cache) 1) ,value))
+
+(defun mole-cache-dirty-delta (cache)
+  "Return the net increase of the dirty region for CACHE, in old coords."
+  (aref (mole-cache-dirty cache) 2))
+
+(gv-define-setter mole-cache-dirty-delta (value cache)
+  `(setf (aref (mole-cache-dirty ,cache) 2) ,value))
+
 
 (cl-defmacro mole-cache-with-changes (cache (beg-name end-name delta-name) &rest body)
   "Bind CACHE's dirty values to VARS and execute BODY.
 VARS is list of 3 symbols (beg end delta) to bind."
   (declare (indent 2) (debug (form (symbolp symbolp symbolp) &rest form)))
-  (let ((cache-name (make-symbol "cache")))
+  (let ((cache-name (make-symbol "cache")) (dirty (make-symbol "dirty")))
     `(let* ((,cache-name ,cache)
-            (,beg-name (mole-cache-dirty-start ,cache-name))
-            (,end-name (mole-cache-dirty-end ,cache-name))
-            (,delta-name (mole-cache-dirty-delta ,cache-name)))
+            (,dirty (mole-cache-dirty ,cache-name))
+            (,beg-name (aref ,dirty 0))
+            (,end-name (aref ,dirty 1))
+            (,delta-name (aref ,dirty 2)))
        ,@body)))
 
 (defun mole-cache-new-to-old (cache new-pos)
