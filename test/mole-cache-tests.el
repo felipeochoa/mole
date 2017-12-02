@@ -108,5 +108,47 @@ ENTRIES is a list of (pos prod result) lists."
     (should (= 0 (mole-cache-num-entries cache)))
     (should (equal (mole-cache-entry-counts cache) '()))))
 
+(ert-deftest mole-cache-get-with-dirty-grown ()
+  "Ensure get operations translate positions when buffer is dirty
+and larger than originally."
+  (let ((cache (mole-cache-test-cache '((1 1 result1)
+                                        (3 2 result2)
+                                        (4 2 result3)
+                                        (6 2 result4)
+                                        (10 1 result5)))))
+    (setf (mole-cache-dirty-start cache) 3
+          (mole-cache-dirty-end cache) 6
+          (mole-cache-dirty-delta cache) 2)
+    (should (eq 'result1 (mole-cache-get cache 1 1)))
+    (should (null (mole-cache-get cache 3 2)))
+    (should (null (mole-cache-get cache 4 2)))
+    (should (null (mole-cache-get cache 5 2)))
+    (should (null (mole-cache-get cache 6 2)))
+    (should (eq 'result4 (mole-cache-get cache 8 2)))
+    (should (null (mole-cache-get cache 10 1)))
+    (should (eq 'result5 (mole-cache-get cache 12 1)))))
+
+(ert-deftest mole-cache-get-with-dirty-shrank ()
+  "Ensure get operations translate positions when buffer is dirty
+and larger than originally."
+  (let ((cache (mole-cache-test-cache '((1 1 result1)
+                                        (3 2 result2)
+                                        (4 0 result3)
+                                        (6 1 result4)
+                                        (10 1 result5)))))
+    (setf (mole-cache-dirty-start cache) 3
+          (mole-cache-dirty-end cache) 6
+          (mole-cache-dirty-delta cache) -2)
+    (should (eq 'result1 (mole-cache-get cache 1 1)))
+    (should (null (mole-cache-get cache 1 2)))
+    (should (null (mole-cache-get cache 2 0)))
+    (should (null (mole-cache-get cache 3 2)))
+    (should (null (mole-cache-get cache 4 0)))
+    (should (eq 'result4 (mole-cache-get cache 4 1)))
+    (should (null (mole-cache-get cache 6 1)))
+    (should (eq 'result5 (mole-cache-get cache 8 1)))
+    (should (null (mole-cache-get cache 10 1)))))
+
 (provide 'mole-cache-tests)
+
 ;;; mole-cache-tests.el ends here

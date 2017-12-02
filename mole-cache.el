@@ -46,14 +46,11 @@ DIRTY-DELTA -- net increase in characters in the dirty area"
   (dirty-end 0)
   (dirty-delta 0))
 
-(defmacro mole-cache-with-changes (cache vars &rest body)
+(cl-defmacro mole-cache-with-changes (cache (beg-name end-name delta-name) &rest body)
   "Bind CACHE's dirty values to VARS and execute BODY.
 VARS is list of 3 symbols (beg end delta) to bind."
   (declare (indent 2) (debug (form (symbolp symbolp symbolp) &rest form)))
-  (let ((beg-name (car vars))
-        (end-name (cadr vars))
-        (delta-name (nth 2 vars))
-        (cache-name (make-symbol "cache")))
+  (let ((cache-name (make-symbol "cache")))
     `(let* ((,cache-name ,cache)
             (,beg-name (mole-cache-dirty-start ,cache-name))
             (,end-name (mole-cache-dirty-end ,cache-name))
