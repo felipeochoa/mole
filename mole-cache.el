@@ -63,10 +63,8 @@ increase in characters in the dirty area."
 (gv-define-setter mole-cache-dirty-delta (value cache)
   `(setf (aref (mole-cache-dirty ,cache) 2) ,value))
 
-
 (cl-defmacro mole-cache-with-changes (cache (beg-name end-name delta-name) &rest body)
-  "Bind CACHE's dirty values to VARS and execute BODY.
-VARS is list of 3 symbols (beg end delta) to bind."
+  "Bind CACHE's dirty values to BEG-NAME, END-NAME, DELTA-NAME and execute BODY."
   (declare (indent 2) (debug (form (symbolp symbolp symbolp) &rest form)))
   (let ((cache-name (make-symbol "cache")) (dirty (make-symbol "dirty")))
     `(let* ((,cache-name ,cache)
@@ -94,12 +92,6 @@ If OLD-POS is in the dirty region, return nil."
      ((< old-pos end) nil)
      (t (+ old-pos delta)))))
 
-(defun mole-cache-new-vector (cache)
-  "Make a new vector for the second level of storage for CACHE."
-  (let ((vec (make-vector (1+ (mole-cache-num-prods cache)) nil)))
-    (setf (mole-cache-results-vector-num-entries vec) 0)
-    vec))
-
 (defsubst mole-cache-results-vector-num-entries (vec)
   "Return the number of non-nil entries in VEC.
 Relies on the last element of VEC being this value."
@@ -108,13 +100,19 @@ Relies on the last element of VEC being this value."
 (gv-define-setter mole-cache-results-vector-num-entries (value vec)
   `(setf (aref ,vec (1- (length ,vec))) ,value))
 
-(defun mole-cache-set (cache pos prod-num res)
+(defun mole-cache-new-vector (cache)
+  "Make a new vector for the second level of storage for CACHE."
+  (let ((vec (make-vector (1+ (mole-cache-num-prods cache)) nil)))
+    (setf (mole-cache-results-vector-num-entries vec) 0)
+    vec))
+
+(defun mole-cache-set (cache pos end prod-num res)
   "Store a parse result into CACHE.
 POS is the buffer location where parsing is happening.  PROD-NUM
 is the numerical index of the production to check.  RES is the
 result to store, which is returned."
   (mole-cache-with-changes cache (dirty-beg dirty-end dirty-delta)
-    (assert (= 0 dirty-beg dirty-end dirty-delta)))
+    (cl-assert (= 0 dirty-beg dirty-end dirty-delta)))
   (let* ((old-pos (mole-cache-new-to-old cache pos))
          (pos-table (mole-cache-table cache))
          (pos-results (gethash old-pos pos-table)))
