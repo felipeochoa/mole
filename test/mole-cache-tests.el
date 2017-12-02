@@ -8,6 +8,7 @@
 (require 'ert)
 (require 'ert-x)
 (require 'cl-lib)
+(require 'subr-x)
 
 (cl-declaim (optimize (safety 3)))
 
@@ -39,6 +40,27 @@ ENTRIES is a list of (pos end prod result) lists."
        (push (cons k (mole-cache-results-vector-num-entries v)) res))
      (mole-cache-table cache))
     (sort res (lambda (x y) (<= (car x) (car y))))))
+
+(defun mole-tuple-lte (x y)
+  "Lexicographic <= for tuples X and Y."
+  (cond
+   ((null x) t)
+   ((< (car x) (car y)) t)
+   ((= (car x) (car y)) (mole-tuple-lte (cdr x) (cdr y)))
+   (t nil)))
+
+(defun mole-cache-to-alist (cache)
+  "Return a sorted list of (pos end prod res) tuples CACHE."
+  (let (res)
+    (maphash
+     (lambda (pos vec)
+       (dotimes (i (1- (length vec)))
+         (when-let (elt (aref vec i))
+           (push (list pos (mole-cache-result-end elt)
+                       i (mole-cache-result-result elt))
+                 res))))
+     (mole-cache-table cache))
+    (sort res 'mole-tuple-lte)))
 
 (ert-deftest mole-cache-basic-get-set ()
   "Ensure the basic cache functionality is working"
@@ -158,6 +180,34 @@ overlaps the dirty region."
     (should-not (mole-cache-get cache 4 0)) ; result5
     (should (eq 'result6 (mole-cache-get cache 4 1)))
     (should (eq 'result7 (mole-cache-get cache 8 1)))))
+
+
+;;; cache chaining
+
+(ert-deftest mole-cache-transfer-entities-both-clean ()
+  (let ((from (mole-cache-test-cache '((1 2 0 result0) ; before gap
+                                       (2 6 1 result1) ; overlaps gap
+                                       (2 8 0 result2) ; covers gap
+                                       (2 3 2 result3) ; before gap
+                                       (3 6 0 result4) ; starts in gap
+                                       (7 9 1 result5) ; after gap
+                                       (8 9 0 result6))))
+        (to (mole-cache-test-cache '((1 5 2 result7) ; keep & merge row
+                                     (3 6 1 result8) ; keep & dont merge row (invalid)
+                                     (4 6 0 result9) ; keep & dont merge row (none)
+                                     (5 7 1 result10))))) ; keep
+    (setf (mole-cache-dirty-start from) 3
+          (mole-cache-dirty-end from) 6
+          (mole-cache-dirty-delta from) -2)
+    (mole-cache-transfer-entries from to)
+    (should (equal (mole-cache-to-alist to)
+                   '((1 2 0 result0)
+                     (1 5 2 result7)
+                     (2 3 2 result3)
+                     (3 6 1 result8)
+                     (4 6 0 result9)
+                     (5 7 1 result10)
+                     (6 7 0 result6))))))
 
 (provide 'mole-cache-tests)
 

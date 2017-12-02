@@ -79,6 +79,12 @@ increase in characters in the dirty area."
   (mole-cache-with-changes cache (beg end)
     (= 0 beg end)))
 
+(defsubst mole-cache-invalid-pos-p (cache pos)
+  "Return t if the dirty region for CACHE includes POS.
+POS should be in old-buffer coordinates."
+  (mole-cache-with-changes cache (beg end)
+    (<= beg pos (1- end))))
+
 (defun mole-cache-new-to-old (cache new-pos)
   "Get the pre-dirty equivalent for CACHE of NEW-POS.
 If NEW-POS is in the dirty region, return nil."
@@ -95,6 +101,18 @@ If OLD-POS is in the dirty region, return nil."
     (cond
      ((< old-pos beg) old-pos)
      ((< old-pos end) nil)
+     (t (+ old-pos delta)))))
+
+(defun mole-cache-old-to-new* (cache old-pos)
+  "Like `mole-cache-old-to-new', but for end-of-range positions.
+This function is necessary since end-of-region positions are
+considered in the dirty region if the character before them is in
+the region.  CACHE and OLD-POS are as in
+`mole-cache-old-to-new'."
+  (mole-cache-with-changes cache (beg end delta)
+    (cond
+     ((<= old-pos beg) old-pos)
+     ((<= old-pos end) nil)
      (t (+ old-pos delta)))))
 
 (defsubst mole-cache-results-vector-num-entries (vec)
@@ -168,6 +186,44 @@ cache."
               (remhash old-pos (mole-cache-table cache))
             (setf (aref pos-results prod-num) nil)))
         res))))
+
+
+;;; Cache chaining
+
+(defun mole-cache-transfer-entries (from-cache to-cache)
+  "Copy FROM-CACHE's valid entries into TO-CACHE.
+TO-CACHE must have an empty dirty region.  If any (pos . prod)
+pair is in both caches, the result in TO-CACHE will remain
+unchanged.  FROM-CACHE is destructively modified and cannot be
+used after this."
+  (cl-assert (mole-cache-clean-p to-cache))
+  (cl-assert (= (mole-cache-num-prods from-cache)
+                (mole-cache-num-prods to-cache)))
+  (let ((new-table (mole-cache-table to-cache))
+        (num-prods (mole-cache-num-prods from-cache)))
+    (maphash
+     (lambda (pos results)
+       (unless (mole-cache-invalid-pos-p from-cache pos)
+         ;; TODO: if TO-CACHE does not have a vector yet, we should
+         ;; just re-use the one from FROM-CACHE
+         (let* ((new-pos (mole-cache-old-to-new from-cache pos))
+                (new-results (or (gethash new-pos new-table)
+                                 (puthash new-pos (mole-cache-new-vector to-cache) new-table)))
+                (new-entries 0)
+                elt)
+           (dotimes (i num-prods)
+             (unless (aref new-results i)
+               (setq elt (aref results i))
+               (when (and elt (mole-cache-result-valid-p elt from-cache))
+                 (cl-callf2 mole-cache-old-to-new from-cache (mole-cache-result-pos elt))
+                 (cl-callf2 mole-cache-old-to-new* from-cache (mole-cache-result-end elt))
+                 (aset new-results i elt)
+                 (cl-incf new-entries))))
+           (cl-incf (mole-cache-results-vector-num-entries new-results) new-entries))))
+     (mole-cache-table from-cache))
+    ;; ensure any attempts to use FROM-CACHE blow up quickly
+    (setf (mole-cache-table from-cache) nil)
+    to-cache))
 
 (provide 'mole-cache)
 
