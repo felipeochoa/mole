@@ -63,15 +63,15 @@ increase in characters in the dirty area."
 (gv-define-setter mole-cache-dirty-delta (value cache)
   `(setf (aref (mole-cache-dirty ,cache) 2) ,value))
 
-(cl-defmacro mole-cache-with-changes (cache (beg-name end-name delta-name) &rest body)
+(cl-defmacro mole-cache-with-changes (cache (beg-name end-name &optional delta-name) &rest body)
   "Bind CACHE's dirty values to BEG-NAME, END-NAME, DELTA-NAME and execute BODY."
-  (declare (indent 2) (debug (form (symbolp symbolp symbolp) &rest form)))
+  (declare (indent 2) (debug (form (symbolp symbolp &optional symbolp) &rest form)))
   (let ((cache-name (make-symbol "cache")) (dirty (make-symbol "dirty")))
     `(let* ((,cache-name ,cache)
             (,dirty (mole-cache-dirty ,cache-name))
             (,beg-name (aref ,dirty 0))
             (,end-name (aref ,dirty 1))
-            (,delta-name (aref ,dirty 2)))
+            ,@(when delta-name `((,delta-name (aref ,dirty 2)))))
        ,@body)))
 
 (defun mole-cache-new-to-old (cache new-pos)
@@ -106,11 +106,31 @@ Relies on the last element of VEC being this value."
     (setf (mole-cache-results-vector-num-entries vec) 0)
     vec))
 
+(cl-defstruct (mole-cache-result
+               (:constructor make-mole-cache-result (pos end result)))
+  "Contains the result of a parse.
+In order to enable incremental parsing, parse results have an
+`end' field that indicates the furthest point the parser reached
+in generating this result. In the case of lookaheads and choice
+productions, this point can be past the end of the matched
+node."
+  pos
+  end
+  result)
+
+(defun mole-cache-result-valid-p (res cache)
+  "Return t if RES is still valid in CACHE."
+  (mole-cache-with-changes cache (dirty-beg dirty-end)
+      (or (<= (mole-cache-result-end res) dirty-beg)
+          (>= (mole-cache-result-pos res) dirty-end))))
+
 (defun mole-cache-set (cache pos end prod-num res)
   "Store a parse result into CACHE.
-POS is the buffer location where parsing is happening.  PROD-NUM
-is the numerical index of the production to check.  RES is the
-result to store, which is returned."
+POS is the buffer location where parsing is happening.  END is
+the last buffer position encountered by the parser.  If the
+buffer gets dirty between POS and END, the result will be
+invalidated.  PROD-NUM is the numerical index of the production
+to check.  RES is the result to store, which is returned."
   (mole-cache-with-changes cache (dirty-beg dirty-end dirty-delta)
     (cl-assert (= 0 dirty-beg dirty-end dirty-delta)))
   (let* ((old-pos (mole-cache-new-to-old cache pos))
@@ -121,7 +141,8 @@ result to store, which is returned."
     (unless (aref pos-results prod-num)
       (cl-incf (mole-cache-num-entries cache))
       (cl-incf (mole-cache-results-vector-num-entries pos-results)))
-    (setf (aref pos-results prod-num) res)))
+    (setf (aref pos-results prod-num) (make-mole-cache-result pos end res))
+    res))
 
 (defun mole-cache-get (cache pos prod-num &optional remove)
   "Retrieve a parse result from CACHE or nil if not cached.
@@ -132,8 +153,12 @@ cache."
   (when-let (old-pos (mole-cache-new-to-old cache pos))
     ;; OLD-POS could be nil if pos is in the dirty region
     (when-let (pos-results (gethash old-pos (mole-cache-table cache)))
-      (let ((res (aref pos-results prod-num)))
-        (when (and remove res)
+      (when-let (res (aref pos-results prod-num))
+        (if (mole-cache-result-valid-p res cache)
+            (setq res (mole-cache-result-result res))
+          (setq remove t)
+          (setq res nil))
+        (when remove
           (cl-decf (mole-cache-num-entries cache))
           (if (= 0 (cl-decf (mole-cache-results-vector-num-entries pos-results)))
               (remhash old-pos (mole-cache-table cache))
