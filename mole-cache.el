@@ -74,6 +74,11 @@ increase in characters in the dirty area."
             ,@(when delta-name `((,delta-name (aref ,dirty 2)))))
        ,@body)))
 
+(defun mole-cache-clean-p (cache)
+  "Return t if the dirty region for CACHE is empty."
+  (mole-cache-with-changes cache (beg end)
+    (= 0 beg end)))
+
 (defun mole-cache-new-to-old (cache new-pos)
   "Get the pre-dirty equivalent for CACHE of NEW-POS.
 If NEW-POS is in the dirty region, return nil."
@@ -131,8 +136,7 @@ the last buffer position encountered by the parser.  If the
 buffer gets dirty between POS and END, the result will be
 invalidated.  PROD-NUM is the numerical index of the production
 to check.  RES is the result to store, which is returned."
-  (mole-cache-with-changes cache (dirty-beg dirty-end dirty-delta)
-    (cl-assert (= 0 dirty-beg dirty-end dirty-delta)))
+  (cl-assert (mole-cache-clean-p cache))
   (let* ((old-pos (mole-cache-new-to-old cache pos))
          (pos-table (mole-cache-table cache))
          (pos-results (gethash old-pos pos-table)))
