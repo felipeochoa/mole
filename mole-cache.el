@@ -94,6 +94,8 @@ Relies on the last element of VEC being this value."
 POS is the buffer location where parsing is happening.  PROD-NUM
 is the numerical index of the production to check.  RES is the
 result to store, which is returned."
+  (mole-cache-with-changes cache (dirty-beg dirty-end dirty-delta)
+    (assert (= 0 dirty-beg dirty-end dirty-delta)))
   (let* ((old-pos (mole-cache-new-to-old cache pos))
          (pos-table (mole-cache-table cache))
          (pos-results (gethash old-pos pos-table)))
