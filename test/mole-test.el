@@ -41,19 +41,32 @@ FAILURES is a list of strings that NAME should not parse."
          (fullname (intern (format "mole-builders-%s" firstname))))
     `(ert-deftest ,fullname ()
        (ert-with-test-buffer (:name ',fullname)
-         (letrec ,(mapcar (lambda (p) `(,(car p) `(lambda ,@(cdr (mole-build-nonterminal ',p)))))
-                          productions)
-           (dolist (succ ',successes)
-             (unless (consp succ)
-               (setq succ (cons succ (1+ (length succ)))))
-             (erase-buffer) (insert (car succ)) (goto-char (point-min))
-             (should (funcall ,firstname))
-             (should (eq (point) (cdr succ))))
+         ;; This test uses eval so that the macroexpansion happens at
+         ;; runtime. This helps ERT deal with errors, and it ensures
+         ;; the tests don't have to be recompiled after every change
+         ;; to a build function.
+         ;; TODO: Figure out how to work the two levels of quasiquoting
+         (eval
+          (list
+           'letrec (list '(whitespace (lambda
+                                        ,@(cdr (mole-build-terminal
+                                                (list 'whitespace
+                                                      mole-default-whitespace-terminal)))))
+                         ,@(mapcar (lambda (p) `(list ',(car p)
+                                                 (cons 'lambda (cdr (mole-build-nonterminal ',p)))))
+                                   productions))
+           '(dolist (succ ',successes)
+              (unless (consp succ)
+                (setq succ (cons succ (1+ (length succ)))))
+              (erase-buffer) (insert (car succ)) (goto-char (point-min))
+              (should (funcall ,firstname))
+              (should (eq (point) (cdr succ))))
            ,(when failures
-              `(dolist (f ',failures)
-                 (erase-buffer) (insert f) (goto-char (point-min))
-                 (should (null (funcall ,firstname)))
-                 (should (bobp)))))))))
+              `'(dolist (f ',failures)
+                  (erase-buffer) (insert f) (goto-char (point-min))
+                  (should (null (funcall ,firstname)))
+                  (should (bobp)))))
+          t)))))
 
 (ert-deftest mole-build-nonterminal-name ()
   "Ensure that `mole-build-nonterminal' assigns the correct name
