@@ -105,16 +105,21 @@
 The resulting form always evaluates to a list. If the sequence of
 productions failed, the list will be nil. Otherwise, it will
 have one `mole-node' for each item in productions"
-    (if (null (cdr productions))
-        (let ((res (cl-gensym))
-              (prod (mole-build-production (car productions))))
-          `(when-let ((,res ,prod)) (list ,res)))
-      (let* ((block-name (cl-gensym)))
-        `(cl-block ,block-name
-           (list ,@(mapcar (lambda (prod)
-                             `(or ,(mole-build-production prod)
-                                  (cl-return-from ,block-name)))
-                           productions))))))
+    (let ((res (cl-gensym)))
+      (if (null (cdr productions))
+          ;; special-case single item sequences
+          `(when-let ((,res ,(mole-build-production (car productions)))) (list ,res)))
+      (let ((block-name (cl-gensym)) (beg (make-symbol "beg")))
+        ;; ensure if any parse fails, go back to initial point
+        `(let ((,beg (point))
+               (,res
+                (cl-block ,block-name
+                  (list ,@(mapcar (lambda (prod)
+                                    `(or ,(mole-build-production prod)
+                                         (cl-return-from ,block-name)))
+                                  productions)))))
+           (unless ,res (goto-char ,beg))
+           ,res))))
 
   (defun mole-build-zero-or-more (productions)
     "Return a form that evaluates to zero or more PRODUCTIONS instances."
