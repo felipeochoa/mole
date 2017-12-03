@@ -181,6 +181,25 @@ overlaps the dirty region."
     (should (eq 'result6 (mole-cache-get cache 4 1)))
     (should (eq 'result7 (mole-cache-get cache 8 1)))))
 
+(ert-deftest mole-cache-update-dirty-region ()
+  (let ((cache (make-mole-cache :num-prods 3)))
+    (should (equal [0 0 0] (mole-cache-dirty cache)))
+
+    (mole-cache-update-dirty-region cache 3 3 4)
+    (should (equal [3 3 4] (mole-cache-dirty cache)))
+
+    (mole-cache-update-dirty-region cache 3 5 -2)
+    (should (equal [3 3 2] (mole-cache-dirty cache)))
+
+    (mole-cache-update-dirty-region cache 5 9 -4)
+    (should (equal [3 7 -2] (mole-cache-dirty cache)))
+
+    (mole-cache-update-dirty-region cache 5 6 3)
+    (should (equal [3 8 1] (mole-cache-dirty cache)))
+
+    (mole-cache-update-dirty-region cache 2 3 -1)
+    (should (equal [2 8 0] (mole-cache-dirty cache)))))
+
 
 ;;; cache chaining
 

@@ -63,6 +63,23 @@ increase in characters in the dirty area."
 (gv-define-setter mole-cache-dirty-delta (value cache)
   `(setf (aref (mole-cache-dirty ,cache) 2) ,value))
 
+(defun mole-cache-update-dirty-region (cache beg end delta)
+  "Report a new buffer change to CACHE.
+\(BEG . END\) is the range of modified characters (in
+pre-modification buffer coordinates), DELTA is the net increase
+in character count."
+  (let* ((vec (mole-cache-dirty cache))
+         (old-beg (aref vec 0))
+         (old-end (aref vec 1))
+         (old-delta (aref vec 2)))
+    (setq beg (or (mole-cache-new-to-old cache beg) old-beg))
+    (setq end (or (mole-cache-new-to-old cache end) old-end))
+    (when (or (zerop old-beg) (< beg old-beg))
+      (aset vec 0 beg))
+    (when (> end old-end)
+      (aset vec 1 end))
+    (aset vec 2 (+ old-delta delta))))
+
 (cl-defmacro mole-cache-with-changes (cache (beg-name end-name &optional delta-name) &rest body)
   "Bind CACHE's dirty values to BEG-NAME, END-NAME, DELTA-NAME and execute BODY."
   (declare (indent 2) (debug (form (symbolp symbolp &optional symbolp) &rest form)))
