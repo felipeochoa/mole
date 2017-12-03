@@ -76,18 +76,22 @@
     "Return a (name args body) list for SPEC."
     (let ((name (car spec))
           (args (cdr spec))
-          (children (make-symbol "children")))
+          (children (make-symbol "children"))
+          (old-pt (make-symbol "old-pt")))
       (list name ()
-            `(when-let ((,children ,(mole-build-sequence args)))
-               (mole-node :name ',name :children ,children)))))
+            `(let ((,old-pt (point)) ,children)
+               (funcall whitespace)
+               (setq ,children ,(mole-build-sequence args))
+               (if ,children
+                   (progn (funcall whitespace)
+                          (mole-node :name ',name :children ,children))
+                 (goto-char ,old-pt)
+                 nil)))))
 
   (defun mole-build-production (production)
     "Compile PRODUCTION into recursive calls."
     (cond
-     ((symbolp production) `(prog2
-                                (funcall whitespace)
-                                (funcall ,production)
-                              (funcall whitespace)))
+     ((symbolp production) `(funcall ,production))
      ((stringp production) `(mole-parse-anonymous-literal ,production))
      ((consp production)
       (cl-case (car production)

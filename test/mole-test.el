@@ -101,6 +101,10 @@ FAILURES is a list of strings that NAME should not parse."
   ("" ("tes" . 1))
   ("test"))
 
+(mole-define-nonterminal-test ((whitespace-backtracking "a" (or nonterminal "b"))
+                               (nonterminal "x"))
+  ("ab" "  ab  " " a   x  ") ("a b"))
+
 (ert-deftest mole-basic-grammar-test ()
   "Test a very simple expression grammar."
   (let ((g (mole-create-grammar
