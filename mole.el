@@ -76,7 +76,7 @@
     "Return a (name args body) list for SPEC."
     (let ((name (car spec))
           (args (cdr spec))
-          (children (cl-gensym)))
+          (children (make-symbol "children")))
       (list name ()
             `(when-let ((,children ,(mole-build-sequence args)))
                (mole-node :name ',name :children ,children)))))
@@ -105,11 +105,11 @@
 The resulting form always evaluates to a list. If the sequence of
 productions failed, the list will be nil. Otherwise, it will
 have one `mole-node' for each item in productions"
-    (let ((res (cl-gensym)))
+    (let ((res (make-symbol "res")))
       (if (null (cdr productions))
           ;; special-case single item sequences
           `(when-let ((,res ,(mole-build-production (car productions)))) (list ,res)))
-      (let ((block-name (cl-gensym)) (beg (make-symbol "beg")))
+      (let ((block-name (make-symbol "block-name")) (beg (make-symbol "beg")))
         ;; ensure if any parse fails, go back to initial point
         `(let ((,beg (point))
                (,res
@@ -123,8 +123,8 @@ have one `mole-node' for each item in productions"
 
   (defun mole-build-zero-or-more (productions)
     "Return a form that evaluates to zero or more PRODUCTIONS instances."
-    (let ((item (cl-gensym))
-          (star-items (cl-gensym))
+    (let ((item (make-symbol "item"))
+          (star-items (make-symbol "star-items"))
           (production-form (mole-build-sequence productions)))
       `(let (,item ,star-items)
          (while (setq ,item ,production-form)
@@ -133,8 +133,8 @@ have one `mole-node' for each item in productions"
 
   (defun mole-build-one-or-more (productions)
     "Return a form that evaluates to one or more PRODUCTIONS instances."
-    (let ((item (cl-gensym))
-          (star-items (cl-gensym))
+    (let ((item (make-symbol "item"))
+          (star-items (make-symbol "star-items"))
           (production-form (mole-build-sequence productions)))
       `(let (,item ,star-items)
          (while (setq ,item ,production-form)
