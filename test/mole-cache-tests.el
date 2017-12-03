@@ -9,18 +9,11 @@
 (require 'ert-x)
 (require 'cl-lib)
 (require 'subr-x)
+(require 'f)
 
 (cl-declaim (optimize (safety 3)))
 
-(load (let (file-name-handler-alist)
-        (expand-file-name
-         "../mole-cache"
-         (file-name-directory
-          (cond                         ; inlined from f-this-file
-           (load-in-progress load-file-name)
-           ((and (boundp 'byte-compile-current-file) byte-compile-current-file)
-            byte-compile-current-file)
-           (:else (buffer-file-name)))))))
+(load (f-expand "mole-cache" (f-parent (f-dirname (f-this-file)))))
 
 (defun mole-cache-test-cache (entries)
   "Make a cache and populate it with ENTRIES.
