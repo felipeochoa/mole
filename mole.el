@@ -72,6 +72,10 @@
 before attempting a match and after a successful match. If t,
 no such chomping will be performed.")
 
+  (defvar mole-default-props '()
+    "Plist of `mole-production-keys' to use as defaults values
+when creating a new grammar.")
+
   (defun mole-split-spec-args (spec)
     "Split out config keys from SPEC."
     (setq spec (append spec nil))
@@ -86,9 +90,8 @@ no such chomping will be performed.")
 
   (defun mole-build-production (spec)
     "Return a (name args body) list for SPEC."
-    (cl-destructuring-bind (props . args) (mole-split-spec-args (cdr spec))
-      (let ((name (car spec))
-            (children (make-symbol "children"))
+    (cl-destructuring-bind (name props args) spec
+      (let ((children (make-symbol "children"))
             (lexical (plist-get props :lexical)))
         (list name ()
               (if lexical
@@ -186,9 +189,10 @@ The form evaluates to a blank `mole-node-literal' if
 
 (defmacro mole-create-grammar (&rest productions)
   "Create a new grammar object with PRODUCTIONS."
+  (cl-callf mole-munge-productions productions)
   (let ((whitespace (assq 'whitespace productions)))
     (if whitespace
-        (unless (plist-get (cdr whitespace) :lexical)
+        (unless (plist-get (cadr whitespace) :lexical)
           (error "`whitespace' production must be lexical"))
       (push mole-default-whitespace-terminal productions)))
   `(let (,@(mapcar 'car productions))
@@ -199,6 +203,22 @@ The form evaluates to a blank `mole-node-literal' if
      (mole-grammar :productions (list ,@(mapcar (lambda (term)
                                                   `(cons ',(car term) ,(car term)))
                                                 productions)))))
+
+(defun mole-munge-productions (productions)
+  "Munge PRODUCTIONS from the user-friendly format into a list of specs."
+  (let ((defaults mole-default-props) prods)
+    (while productions
+      (if (memq (car productions) mole-production-keys)
+          (let ((kw (pop productions)))
+            (push (pop productions) defaults)
+            (push kw defaults))
+        (let* ((prod (pop productions))
+               (arg-spec (mole-split-spec-args (cdr prod))))
+          (push (list (car prod) ; name
+                      (nconc (car arg-spec) defaults) ; props
+                      (cdr arg-spec)) ; spec
+                prods))))
+    (nreverse prods)))
 
 (defun mole-parse (grammar production)
   "Attempt to parse GRAMMAR's PRODUCTION starting at point."

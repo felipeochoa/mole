@@ -19,7 +19,7 @@
 (ert-deftest mole-build-production-name ()
   "Ensure that `mole-build-production' assigns the correct name
   to the production."
-  (dolist (prod '((p1 "p1") (p2 "a" "b") (p3 a b c)))
+  (dolist (prod '((p1 nil ("p1")) (p2 (:lexical t) ("a" "b")) (p3 nil (a b c))))
     (should (eq (car prod)
                 (car (mole-build-production prod))))))
 
@@ -40,7 +40,9 @@ FAILURES is a list of strings that NAME should not parse."
   (cl-assert (and (listp failures) (cl-every 'stringp failures)))
   (let* ((firstname (caar productions))
          (fullname (intern (format "mole-builders-%s" firstname))))
-    (push mole-default-whitespace-terminal productions)
+    (unless (assq 'whitespace productions)
+      (push mole-default-whitespace-terminal productions))
+    (cl-callf mole-munge-productions productions)
     `(ert-deftest ,fullname ()
        (ert-with-test-buffer (:name ',fullname)
          ;; TODO: Figure out how to work the two levels of quasiquoting
@@ -125,6 +127,26 @@ FAILURES is a list of strings that NAME should not parse."
                      (product (number "3"))
                      "+"
                      (product (number "2") "*" (number "6")))))))
+
+(ert-deftest mole-grammar-varying-defaults ()
+  "Test a grammar with various defaults plists"
+  (let ((g (eval `(mole-create-grammar
+                   :lexical t
+                   (whitespace "[ \t\n\f]*")
+                   (a "a")
+                   :lexical nil
+                   (b "b")
+                   (c "c")
+                   :lexical t
+                   (d "d"))
+                 t)))
+
+    (should (equal (mole-node-to-sexp (mole-parse-string g 'a "a")) '(a "a")))
+    (should-not (mole-parse-string g 'a " a"))
+    (should (equal (mole-node-to-sexp (mole-parse-string g 'b " b  ")) '(b "b")))
+    (should (equal (mole-node-to-sexp (mole-parse-string g 'c " c  ")) '(c "c")))
+    (should (equal (mole-node-to-sexp (mole-parse-string g 'd "d")) '(d "d")))
+    (should-not (mole-parse-string g 'd " d"))))
 
 (provide 'mole-tests)
 ;;; mole-test.el ends here
