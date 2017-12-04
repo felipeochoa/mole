@@ -60,7 +60,7 @@
            (progn (goto-char ,point) nil)))))
 
 (defun mole-parse-anonymous-literal (regexp)
-  "If REGEXP matches at point, return a new anonymous literal."
+  "Return a new anonymous literal if looking at REGEXP at point."
   (when (looking-at regexp)
     (goto-char (match-end 0))
     (mole-node-literal :string (match-string-no-properties 0))))
