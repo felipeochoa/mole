@@ -103,6 +103,22 @@ FAILURES is a list of strings that NAME should not parse."
                               (lexical-callee :lexical t "a"))
   ("aa" " aa" "  aa  ") ("a a"))
 
+(defun mole-extern-test-fn (num production)
+  "Test function for the extern element.
+NUM PRODUCTION: appease flycheck."
+  (should (= num 1))
+  (mole-maybe-save-excursion
+    (let (r1 r2 r3)
+      (setq r1 (funcall production))
+      (when (and r1 (looking-at-p "xyz"))
+        (setq r2 "xyz") (forward-char 3)
+        (setq r3 (funcall production))
+        (when r3 (mole-node :name 'custom-name :children (list r1 r2 r3)))))))
+
+(mole-define-production-test ((extern (extern 'mole-extern-test-fn 1 non-lexical))
+                              (non-lexical "a"))
+  ("axyza") ("a a" ""))
+
 (mole-define-production-test ((repeat (2 lexical) (1 3 non-lexical))
                               (lexical :lexical t "a")
                               (non-lexical "t"))

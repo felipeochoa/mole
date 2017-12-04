@@ -121,6 +121,7 @@ when creating a new grammar.")
         ('?= (mole-build-lookahead (cdr production)))
         ('?! (mole-build-negative-lookahead (cdr production)))
         ('lexical (mole-build-lexical (cdr production)))
+        ('extern (mole-build-extern (cdr production)))
         ((pred numberp) (mole-build-repetition production))
         (_ (error "Unknown production %S" production))))
      (t (error "Unknown production %S" production))))
@@ -218,6 +219,12 @@ well."
     "Return a form for evaluation PRODUCTIONS, but in a lexical environment."
     `(let ((mole-runtime-force-lexical t))
        ,(mole-build-sequence productions)))
+
+  (cl-defun mole-build-extern ((fn &rest args))
+    "Build a custom matcher calling FN with ARGS.
+ARGS is evaluated in the scope of the grammar builder, so it has
+access to the productions, which are funcallable by their name."
+    `(apply ,fn (list ,@args)))
   )
 
 (defvar mole-default-whitespace-terminal '(whitespace :lexical t "[ \t\n\f]*")
