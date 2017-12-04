@@ -22,6 +22,13 @@
       (save-excursion (insert "!teeeest"))
       (should (null (funcall `(lambda ,@(cdr res))))))))
 
+(ert-deftest mole-build-nonterminal-name ()
+  "Ensure that `mole-build-nonterminal' assigns the correct name
+  to the production."
+  (dolist (prod '((p1 "p1") (p2 "a" "b") (p3 a b c)))
+    (should (eq (car prod)
+                (car (mole-build-nonterminal prod))))))
+
 (cl-defmacro mole-define-nonterminal-test (productions successes &optional failures)
   "Test that a nonterminal production matches correctly.
 TESTNAME is used to name the production and the test.
@@ -67,13 +74,6 @@ FAILURES is a list of strings that NAME should not parse."
                   (should (null (funcall ,firstname)))
                   (should (bobp)))))
           t)))))
-
-(ert-deftest mole-build-nonterminal-name ()
-  "Ensure that `mole-build-nonterminal' assigns the correct name
-  to the production."
-  (dolist (prod '((p1 "p1") (p2 "a" "b") (p3 a b c)))
-    (should (eq (car prod)
-                (car (mole-build-nonterminal prod))))))
 
 (mole-define-nonterminal-test ((sequence "t" "e+" "st"))
   ("teeeest")
