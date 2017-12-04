@@ -11,15 +11,15 @@
 
 (load (f-expand "mole" (f-parent (f-dirname (f-this-file)))))
 
-(ert-deftest mole-build-nonterminal-name ()
-  "Ensure that `mole-build-nonterminal' assigns the correct name
+(ert-deftest mole-build-production-name ()
+  "Ensure that `mole-build-production' assigns the correct name
   to the production."
   (dolist (prod '((p1 "p1") (p2 "a" "b") (p3 a b c)))
     (should (eq (car prod)
-                (car (mole-build-nonterminal prod))))))
+                (car (mole-build-production prod))))))
 
-(cl-defmacro mole-define-nonterminal-test (productions successes &optional failures)
-  "Test that a nonterminal production matches correctly.
+(cl-defmacro mole-define-production-test (productions successes &optional failures)
+  "Test that a production production matches correctly.
 TESTNAME is used to name the production and the test.
 PRODS are the productions that NAME should match.
 SUCCESSES is a list of strings that NAME should parse.
@@ -27,11 +27,11 @@ FAILURES is a list of strings that NAME should not parse."
   (declare (indent 1))
   (cl-assert (and (listp productions) (cl-every 'symbolp (mapcar 'car productions))))
   (cl-assert (and (listp successes) (cl-every (lambda (s)
-                                             (or (stringp s)
-                                                 (and (consp s)
-                                                      (stringp (car s))
-                                                      (numberp (cdr s)))))
-                                           successes)))
+                                                (or (stringp s)
+                                                    (and (consp s)
+                                                         (stringp (car s))
+                                                         (numberp (cdr s)))))
+                                              successes)))
   (cl-assert (and (listp failures) (cl-every 'stringp failures)))
   (let* ((firstname (caar productions))
          (fullname (intern (format "mole-builders-%s" firstname))))
@@ -47,7 +47,7 @@ FAILURES is a list of strings that NAME should not parse."
           (list
            'letrec (list
                     ,@(mapcar (lambda (p) `(list ',(car p)
-                                                 (cons 'lambda (cdr (mole-build-nonterminal ',p)))))
+                                                 (cons 'lambda (cdr (mole-build-production ',p)))))
                               productions))
            '(dolist (succ ',successes)
               (unless (consp succ)
@@ -62,47 +62,47 @@ FAILURES is a list of strings that NAME should not parse."
                   (should (bobp)))))
           t)))))
 
-(mole-define-nonterminal-test ((sequence "t" "e+" "st"))
+(mole-define-production-test ((sequence "t" "e+" "st"))
   ("teeeest")
   ("" "teeees"))
 
-(mole-define-nonterminal-test ((zero-or-more (* "t" "a")))
+(mole-define-production-test ((zero-or-more (* "t" "a")))
   ("" "tatatata" ("xx" . 1)))
 
-(mole-define-nonterminal-test ((one-or-more (+ "t" "a")))
+(mole-define-production-test ((one-or-more (+ "t" "a")))
   ("tatatata" "ta")
   ("" "xx" "at" "t" "a"))
 
-(mole-define-nonterminal-test ((zero-or-one (? "t" "a")))
+(mole-define-production-test ((zero-or-one (? "t" "a")))
   ("" "ta" ("tatatata" . 3) ("xx" . 1)))
 
-(mole-define-nonterminal-test ((or (or "t" "a")))
+(mole-define-production-test ((or (or "t" "a")))
   ("t" "a" ("ta" . 2) ("at" . 2) ("tx" . 2) ("ax" . 2))
   ("" "x"))
 
-(mole-define-nonterminal-test ((lookahead (?= "te" "st")))
+(mole-define-production-test ((lookahead (?= "te" "st")))
   (("test" . 1) ("testtest" . 1))
   ("" "tes" "te"))
 
-(mole-define-nonterminal-test ((negative-lookahead (?! "te" "st")))
+(mole-define-production-test ((negative-lookahead (?! "te" "st")))
   ("" ("tes" . 1))
   ("test"))
 
-(mole-define-nonterminal-test ((whitespace-backtracking "a" (or nonterminal "b"))
-                               (nonterminal "x"))
+(mole-define-production-test ((whitespace-backtracking "a" (or nonterminal "b"))
+                              (nonterminal "x"))
   ("ab" "  ab  " " a   x  ") ("a b"))
 
-(mole-define-nonterminal-test ((lexical lexical-callee lexical-callee)
-                               (lexical-callee :lexical t "a"))
+(mole-define-production-test ((lexical lexical-callee lexical-callee)
+                              (lexical-callee :lexical t "a"))
   ("aa" " aa" "  aa  ") ("a a"))
 
-(ert-deftest mole-split-production-args ()
-  "Ensure `mole-split-production-args' works correctly."
+(ert-deftest mole-split-spec-args ()
+  "Ensure `mole-split-spec-args' works correctly."
   (dolist (fixture '((("a" "b" "c") () ("a" "b" "c"))
                      ((:lexical t "a" "b") (:lexical t) ("a" "b"))))
     (cl-destructuring-bind (input config production) fixture
-        (should (equal (cons config production)
-                       (mole-split-production-args input))))))
+      (should (equal (cons config production)
+                     (mole-split-spec-args input))))))
 
 (ert-deftest mole-basic-grammar-test ()
   "Test a very simple expression grammar."

@@ -20,7 +20,7 @@
 (require 'subr-x)
 
 (defclass mole-grammar ()
-  ((nonterminals :initarg :nonterminals :accessor mole-grammar-nonterminals)))
+  ((productions :initarg :productions :accessor mole-grammar-productions)))
 
 (defclass mole-node ()
   ((name :initarg :name :accessor mole-node-name)
@@ -45,7 +45,7 @@
   "Convert LITERAL into a test-friendly sexp."
   (if (slot-boundp literal 'name)
       (list (mole-node-name literal) (mole-node-literal-string literal))
-   (mole-node-literal-string literal)))
+    (mole-node-literal-string literal)))
 
 (cl-defmethod mole-node-to-sexp ((op mole-node-operator))
   "Convert OP into a test-friendly sexp."
@@ -84,7 +84,7 @@ no such chomping will be performed.")
         (setcdr tail nil)
         (cons config spec))))
 
-  (defun mole-build-nonterminal (spec)
+  (defun mole-build-production (spec)
     "Return a (name args body) list for SPEC."
     (cl-destructuring-bind (props . args) (mole-split-spec-args (cdr spec))
       (let ((name (car spec))
@@ -100,7 +100,7 @@ no such chomping will be performed.")
                      (funcall whitespace)
                      (mole-node :name ',name :children ,children))))))))
 
-  (defun mole-build-production (production)
+  (defun mole-build-element (production)
     "Compile PRODUCTION into recursive calls."
     (cond
      ((symbolp production) `(funcall ,production))
@@ -124,13 +124,13 @@ one `mole-node' for each item in productions."
     (let ((res (make-symbol "res")))
       (if (null (cdr productions))
           ;; special-case single item sequences
-          `(when-let ((,res ,(mole-build-production (car productions)))) (list ,res)))
+          `(when-let ((,res ,(mole-build-element (car productions)))) (list ,res)))
       (let ((block-name (make-symbol "block-name")))
         ;; ensure if any parse fails, go back to initial point
         `(mole-maybe-save-excursion
            (cl-block ,block-name
              (list ,@(mapcar (lambda (prod)
-                               `(or ,(mole-build-production prod)
+                               `(or ,(mole-build-element prod)
                                     (cl-return-from ,block-name)))
                              productions)))))))
 
@@ -162,7 +162,7 @@ one `mole-node' for each item in productions."
 
   (defun mole-build-or (productions)
     "Return a form for evaluating a disjunction between productions."
-    `(or ,@(mapcar 'mole-build-production productions)))
+    `(or ,@(mapcar 'mole-build-element productions)))
 
   (defun mole-build-lookahead (productions)
     "Return a form for evaluating PRODUCTIONS in `save-excursion'.
@@ -184,23 +184,23 @@ The form evaluates to a blank `mole-node-literal' if
 (defvar mole-default-whitespace-terminal '(whitespace :lexical t "[ \t\n\f]*")
   "If a grammar doesn't specify whitespace, this value will be used.")
 
-(defmacro mole-create-grammar (nonterminals)
-  "Create a new grammar object with NONTERMINALS."
-  (unless (cl-some (lambda (term) (eq 'whitespace (car term))) nonterminals)
-    (push mole-default-whitespace-terminal nonterminals))
-  `(let (,@(mapcar 'car nonterminals))
+(defmacro mole-create-grammar (productions)
+  "Create a new grammar object with PRODUCTIONS."
+  (unless (cl-some (lambda (term) (eq 'whitespace (car term))) productions)
+    (push mole-default-whitespace-terminal productions))
+  `(let (,@(mapcar 'car productions))
      ,@(mapcar (lambda (spec)
-                 (cl-destructuring-bind (name args body) (mole-build-nonterminal spec)
+                 (cl-destructuring-bind (name args body) (mole-build-production spec)
                    `(setq ,name (lambda ,args ,body))))
-               nonterminals)
-     (mole-grammar :nonterminals (list ,@(mapcar (lambda (term)
-                                                   `(cons ',(car term) ,(car term)))
-                                                 nonterminals)))))
+               productions)
+     (mole-grammar :productions (list ,@(mapcar (lambda (term)
+                                                  `(cons ',(car term) ,(car term)))
+                                                productions)))))
 
 (defun mole-parse (grammar production)
   "Attempt to parse GRAMMAR's PRODUCTION starting at point."
   (save-excursion
-    (if-let ((parser (assq production (mole-grammar-nonterminals grammar))))
+    (if-let ((parser (assq production (mole-grammar-productions grammar))))
         (funcall (cdr parser))
       (error "Production %S not defined in grammar" production))))
 
