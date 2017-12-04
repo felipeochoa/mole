@@ -184,7 +184,7 @@ The form evaluates to a blank `mole-node-literal' if
 (defvar mole-default-whitespace-terminal '(whitespace :lexical t "[ \t\n\f]*")
   "If a grammar doesn't specify whitespace, this value will be used.")
 
-(defmacro mole-create-grammar (productions)
+(defmacro mole-create-grammar (&rest productions)
   "Create a new grammar object with PRODUCTIONS."
   (unless (cl-some (lambda (term) (eq 'whitespace (car term))) productions)
     (push mole-default-whitespace-terminal productions))

@@ -107,10 +107,10 @@ FAILURES is a list of strings that NAME should not parse."
 (ert-deftest mole-basic-grammar-test ()
   "Test a very simple expression grammar."
   (let ((g (eval '(mole-create-grammar
-                   ((whitespace :lexical t "[ \t\n\f]*")
-                    (expression product (* (or "\\+" "-") product))
-                    (product number (* (or "\\*" "/") number))
-                    (number "[0-9]+")))
+                   (whitespace :lexical t "[ \t\n\f]*")
+                   (expression product (* (or "\\+" "-") product))
+                   (product number (* (or "\\*" "/") number))
+                   (number "[0-9]+"))
                  t)))
     (should (equal (mole-node-to-sexp (mole-parse-string g 'expression "3 + 2 * 6"))
                    '(expression
