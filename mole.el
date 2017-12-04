@@ -213,7 +213,7 @@ well."
              (push ,child ,children)
              (cl-incf ,num))
            (when (>= ,num ,min)
-             (mole-node :name 'repetition :children (nreverse ,children)))))))
+             (mole-node-operator :name 'repetition :children (nreverse ,children)))))))
 
   (defun mole-build-lexical (productions)
     "Return a form for evaluation PRODUCTIONS, but in a lexical environment."
