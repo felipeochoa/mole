@@ -29,14 +29,14 @@ PRODS are the productions that NAME should match.
 SUCCESSES is a list of strings that NAME should parse.
 FAILURES is a list of strings that NAME should not parse."
   (declare (indent 1))
-  (cl-assert (and (listp productions) (every 'symbolp (mapcar 'car productions))))
-  (cl-assert (and (listp successes) (every (lambda (s)
+  (cl-assert (and (listp productions) (cl-every 'symbolp (mapcar 'car productions))))
+  (cl-assert (and (listp successes) (cl-every (lambda (s)
                                              (or (stringp s)
                                                  (and (consp s)
                                                       (stringp (car s))
                                                       (numberp (cdr s)))))
                                            successes)))
-  (cl-assert (and (listp failures) (every 'stringp failures)))
+  (cl-assert (and (listp failures) (cl-every 'stringp failures)))
   (let* ((firstname (caar productions))
          (fullname (intern (format "mole-builders-%s" firstname))))
     `(ert-deftest ,fullname ()
