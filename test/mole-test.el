@@ -105,6 +105,18 @@ FAILURES is a list of strings that NAME should not parse."
                                (nonterminal "x"))
   ("ab" "  ab  " " a   x  ") ("a b"))
 
+(mole-define-nonterminal-test ((lexical lexical-callee lexical-callee)
+                               (lexical-callee :lexical t "a"))
+  ("aa" " aa" "  aa  ") ("a a"))
+
+(ert-deftest mole-split-production-args ()
+  "Ensure `mole-split-production-args' works correctly."
+  (dolist (fixture '((("a" "b" "c") () ("a" "b" "c"))
+                     ((:lexical t "a" "b") (:lexical t) ("a" "b"))))
+    (cl-destructuring-bind (input config production) fixture
+        (should (equal (cons config production)
+                       (mole-split-production-args input))))))
+
 (ert-deftest mole-basic-grammar-test ()
   "Test a very simple expression grammar."
   (let ((g (eval '(mole-create-grammar

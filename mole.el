@@ -67,6 +67,24 @@
     (mole-node-literal :string (match-string-no-properties 0))))
 
 (eval-and-compile
+  (defvar mole-production-keys '(:lexical)
+    "List of keys that may be given in a production definition.
+:LEXICAL if nil, has productions chomp whitespace and comments
+before attempting a match and after a successful match. If t,
+no such chomping will be performed.")
+
+  (defun mole-split-spec-args (spec)
+    "Split out config keys from SPEC."
+    (setq spec (append spec nil))
+    (let ((config spec) tail)
+      (while (memq (car spec) mole-production-keys)
+        (setq tail (cdr spec)
+              spec (cddr spec)))
+      (if (eq spec config)
+          (cons nil spec)
+        (setcdr tail nil)
+        (cons config spec))))
+
   (defun mole-build-terminal (spec)
     "Return a (name args body) list for SPEC."
     (cl-destructuring-bind (name re-or-kw &optional arg) spec
@@ -81,15 +99,19 @@
 
   (defun mole-build-nonterminal (spec)
     "Return a (name args body) list for SPEC."
-    (let ((name (car spec))
-          (args (cdr spec))
-          (children (make-symbol "children")))
-      (list name ()
-            `(mole-maybe-save-excursion
-               (funcall whitespace)
-               (when-let (,children  ,(mole-build-sequence args))
-                 '(funcall whitespace)
-                 (mole-node :name ',name :children ,children))))))
+    (cl-destructuring-bind (props . args) (mole-split-spec-args (cdr spec))
+      (let ((name (car spec))
+            (children (make-symbol "children"))
+            (lexical (plist-get props :lexical)))
+        (list name ()
+              (if lexical
+                  `(when-let (,children  ,(mole-build-sequence args))
+                     (mole-node :name ',name :children ,children))
+                `(mole-maybe-save-excursion
+                   (funcall whitespace)
+                   (when-let (,children  ,(mole-build-sequence args))
+                     (funcall whitespace)
+                     (mole-node :name ',name :children ,children))))))))
 
   (defun mole-build-production (production)
     "Compile PRODUCTION into recursive calls."
