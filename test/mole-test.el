@@ -69,6 +69,10 @@ FAILURES is a list of strings that NAME should not parse."
   ("teeeest")
   ("" "teeees"))
 
+(mole-define-production-test ((sequence-operator (: "t" "e+" "st")))
+  ("teeeest")
+  ("" "teeees"))
+
 (mole-define-production-test ((zero-or-more (* "t" "a")))
   ("" "tatatata" ("xx" . 1)))
 
