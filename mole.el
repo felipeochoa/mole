@@ -52,6 +52,13 @@
   "Convert OP into a test-friendly sexp."
   (mapcar 'mole-node-to-sexp (mole-node-children op)))
 
+(defmacro mole-maybe-save-excursion (&rest body)
+  "Execute BODY and restore point unless return value is non-nil."
+  (declare (debug (&rest form)) (indent defun))
+  (let ((point (make-symbol "point")))
+    `(let ((,point (point)))
+       (or (progn ,@body)
+           (progn (goto-char ,point) nil)))))
 
 (defun mole-parse-anonymous-literal (regexp)
   "If REGEXP matches at point, return a new anonymous literal."
@@ -76,17 +83,13 @@
     "Return a (name args body) list for SPEC."
     (let ((name (car spec))
           (args (cdr spec))
-          (children (make-symbol "children"))
-          (old-pt (make-symbol "old-pt")))
+          (children (make-symbol "children")))
       (list name ()
-            `(let ((,old-pt (point)) ,children)
+            `(mole-maybe-save-excursion
                (funcall whitespace)
-               (setq ,children ,(mole-build-sequence args))
-               (if ,children
-                   (progn (funcall whitespace)
-                          (mole-node :name ',name :children ,children))
-                 (goto-char ,old-pt)
-                 nil)))))
+               (when-let (,children  ,(mole-build-sequence args))
+                 '(funcall whitespace)
+                 (mole-node :name ',name :children ,children))))))
 
   (defun mole-build-production (production)
     "Compile PRODUCTION into recursive calls."
@@ -107,23 +110,20 @@
   (defun mole-build-sequence (productions)
     "Compile PRODUCTIONS into sequenced calls to each.
 The resulting form always evaluates to a list. If the sequence of
-productions failed, the list will be nil. Otherwise, it will
-have one `mole-node' for each item in productions"
+productions failed, the list will be nil. Otherwise, it will have
+one `mole-node' for each item in productions."
     (let ((res (make-symbol "res")))
       (if (null (cdr productions))
           ;; special-case single item sequences
           `(when-let ((,res ,(mole-build-production (car productions)))) (list ,res)))
-      (let ((block-name (make-symbol "block-name")) (beg (make-symbol "beg")))
+      (let ((block-name (make-symbol "block-name")))
         ;; ensure if any parse fails, go back to initial point
-        `(let ((,beg (point))
-               (,res
-                (cl-block ,block-name
-                  (list ,@(mapcar (lambda (prod)
-                                    `(or ,(mole-build-production prod)
-                                         (cl-return-from ,block-name)))
-                                  productions)))))
-           (unless ,res (goto-char ,beg))
-           ,res))))
+        `(mole-maybe-save-excursion
+           (cl-block ,block-name
+             (list ,@(mapcar (lambda (prod)
+                               `(or ,(mole-build-production prod)
+                                    (cl-return-from ,block-name)))
+                             productions)))))))
 
   (defun mole-build-zero-or-more (productions)
     "Return a form that evaluates to zero or more PRODUCTIONS instances."
