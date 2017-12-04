@@ -104,6 +104,13 @@ FAILURES is a list of strings that NAME should not parse."
       (should (equal (cons config production)
                      (mole-split-spec-args input))))))
 
+(ert-deftest mole-whitespace-nonlexical-error ()
+  "Ensure `mole-create-grammar' errors if whitespace is non-lexical."
+  (let ((err (should-error (eval `(mole-create-grammar
+                                   (whitespace " *")
+                                   (term "a"))))))
+    (should (string-match-p "lexical" (cadr err)))))
+
 (ert-deftest mole-basic-grammar-test ()
   "Test a very simple expression grammar."
   (let ((g (eval '(mole-create-grammar

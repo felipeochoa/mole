@@ -186,8 +186,11 @@ The form evaluates to a blank `mole-node-literal' if
 
 (defmacro mole-create-grammar (&rest productions)
   "Create a new grammar object with PRODUCTIONS."
-  (unless (cl-some (lambda (term) (eq 'whitespace (car term))) productions)
-    (push mole-default-whitespace-terminal productions))
+  (let ((whitespace (assq 'whitespace productions)))
+    (if whitespace
+        (unless (plist-get (cdr whitespace) :lexical)
+          (error "`whitespace' production must be lexical"))
+      (push mole-default-whitespace-terminal productions)))
   `(let (,@(mapcar 'car productions))
      ,@(mapcar (lambda (spec)
                  (cl-destructuring-bind (name args body) (mole-build-production spec)
