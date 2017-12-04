@@ -65,6 +65,9 @@
     (goto-char (match-end 0))
     (mole-node-literal :string (match-string-no-properties 0))))
 
+(defvar mole-runtime-force-lexical nil
+  "If t, even non-lexical productions will not chomp whitespace.")
+
 (eval-and-compile
   (defvar mole-production-keys '(:lexical)
     "List of keys that may be given in a production definition.
@@ -98,9 +101,9 @@ when creating a new grammar.")
                   `(when-let (,children  ,(mole-build-sequence args))
                      (mole-node :name ',name :children ,children))
                 `(mole-maybe-save-excursion
-                   (funcall whitespace)
+                   (or mole-runtime-force-lexical (funcall whitespace))
                    (when-let (,children  ,(mole-build-sequence args))
-                     (funcall whitespace)
+                     (or mole-runtime-force-lexical (funcall whitespace))
                      (mole-node :name ',name :children ,children))))))))
 
   (defun mole-build-element (production)
@@ -117,6 +120,7 @@ when creating a new grammar.")
         ('? (mole-build-zero-or-one (cdr production)))
         ('?= (mole-build-lookahead (cdr production)))
         ('?! (mole-build-negative-lookahead (cdr production)))
+        ('lexical (mole-build-lexical (cdr production)))
         ((pred numberp) (mole-build-repetition production))
         (_ (error "Unknown production %S" production))))
      (t (error "Unknown production %S" production))))
@@ -209,6 +213,11 @@ well."
              (cl-incf ,num))
            (when (>= ,num ,min)
              (mole-node :name 'repetition :children (nreverse ,children)))))))
+
+  (defun mole-build-lexical (productions)
+    "Return a form for evaluation PRODUCTIONS, but in a lexical environment."
+    `(let ((mole-runtime-force-lexical t))
+       ,(mole-build-sequence productions)))
   )
 
 (defvar mole-default-whitespace-terminal '(whitespace :lexical t "[ \t\n\f]*")
