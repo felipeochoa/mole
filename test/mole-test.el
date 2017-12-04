@@ -103,6 +103,12 @@ FAILURES is a list of strings that NAME should not parse."
                               (lexical-callee :lexical t "a"))
   ("aa" " aa" "  aa  ") ("a a"))
 
+(mole-define-production-test ((repeat (2 lexical) (1 3 non-lexical))
+                              (lexical :lexical t "a")
+                              (non-lexical "t"))
+  ("aat" "aatt" "aattt" "aa  t  t  t  " "aa  tt t" ("aatttt" . 6))
+  ("" "at" "aaat" "a att"))
+
 (ert-deftest mole-split-spec-args ()
   "Ensure `mole-split-spec-args' works correctly."
   (dolist (fixture '((("a" "b" "c") () ("a" "b" "c"))

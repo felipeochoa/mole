@@ -109,7 +109,7 @@ when creating a new grammar.")
      ((symbolp production) `(funcall ,production))
      ((stringp production) `(mole-parse-anonymous-literal ,production))
      ((consp production)
-      (cl-case (car production)
+      (pcase (car production)
         (': (mole-build-sequence (cdr production)))
         ('or (mole-build-or (cdr production)))
         ('* (mole-build-zero-or-more (cdr production)))
@@ -117,7 +117,8 @@ when creating a new grammar.")
         ('? (mole-build-zero-or-one (cdr production)))
         ('?= (mole-build-lookahead (cdr production)))
         ('?! (mole-build-negative-lookahead (cdr production)))
-        (t (error "Unknown production %S" production))))
+        ((pred numberp) (mole-build-repetition production))
+        (_ (error "Unknown production %S" production))))
      (t (error "Unknown production %S" production))))
 
   (defun mole-build-sequence (productions)
@@ -183,7 +184,32 @@ The form evaluates to a blank `mole-node-literal' if
 `production-form' evaluates to nil, or nil otherwise."
     `(save-excursion
        (unless ,(mole-build-sequence productions)
-         (mole-node-literal :name '?= :string "")))))
+         (mole-node-literal :name '?= :string ""))))
+
+  (defun mole-build-repetition (productions)
+    "Return a form for evaluating PRODUCTIONS multiple times.
+The first value is the minimum number of repetitions. If the
+second value is a number, it specifies a maximum number of
+repetitions; otherwise the first value is taken as the max as
+well."
+    (let ((min (car productions))
+          (max (cadr productions))
+          (productions (cddr productions))
+          (num (make-symbol "num"))
+          (child (make-symbol "child"))
+          (children (make-symbol "children")))
+      (unless (numberp max)
+        (push max productions)
+        (setq max min))
+      `(mole-maybe-save-excursion
+         (let ((,num 0) ,child ,children)
+           (while (and (< ,num ,max)
+                       (setq ,child ,(mole-build-sequence productions)))
+             (push ,child ,children)
+             (cl-incf ,num))
+           (when (>= ,num ,min)
+             (mole-node :name 'repetition :children (nreverse ,children)))))))
+  )
 
 (defvar mole-default-whitespace-terminal '(whitespace :lexical t "[ \t\n\f]*")
   "If a grammar doesn't specify whitespace, this value will be used.")
