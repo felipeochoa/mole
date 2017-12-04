@@ -3,6 +3,11 @@
 
 ;;; Commentary:
 
+;;; Many of these tests use eval so that the macroexpansion happens at
+;;; runtime.  Makes errors more clear in ERT, and it ensures the tests
+;;; don't have to be reevaluated after every change to a build
+;;; function.
+
 ;;; Code:
 
 (require 'ert)
@@ -38,10 +43,6 @@ FAILURES is a list of strings that NAME should not parse."
     (push mole-default-whitespace-terminal productions)
     `(ert-deftest ,fullname ()
        (ert-with-test-buffer (:name ',fullname)
-         ;; This test uses eval so that the macroexpansion happens at
-         ;; runtime. This helps ERT deal with errors, and it ensures
-         ;; the tests don't have to be recompiled after every change
-         ;; to a build function.
          ;; TODO: Figure out how to work the two levels of quasiquoting
          (eval
           (list
