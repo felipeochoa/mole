@@ -11,17 +11,6 @@
 
 (load (f-expand "mole" (f-parent (f-dirname (f-this-file)))))
 
-(ert-deftest mole-builders-terminal ()
-  (ert-with-test-buffer (:name 'mole-builders-terminal)
-    (insert "teeeest")
-    (goto-char (point-min))
-    (let ((res (mole-build-terminal '(test "te+st"))))
-      (should (eq (car res) 'test))
-      (should (funcall `(lambda ,@(cdr res))))
-      (should (eq (point) (point-max)))
-      (save-excursion (insert "!teeeest"))
-      (should (null (funcall `(lambda ,@(cdr res))))))))
-
 (ert-deftest mole-build-nonterminal-name ()
   "Ensure that `mole-build-nonterminal' assigns the correct name
   to the production."
@@ -46,6 +35,7 @@ FAILURES is a list of strings that NAME should not parse."
   (cl-assert (and (listp failures) (cl-every 'stringp failures)))
   (let* ((firstname (caar productions))
          (fullname (intern (format "mole-builders-%s" firstname))))
+    (push mole-default-whitespace-terminal productions)
     `(ert-deftest ,fullname ()
        (ert-with-test-buffer (:name ',fullname)
          ;; This test uses eval so that the macroexpansion happens at
@@ -55,13 +45,10 @@ FAILURES is a list of strings that NAME should not parse."
          ;; TODO: Figure out how to work the two levels of quasiquoting
          (eval
           (list
-           'letrec (list '(whitespace (lambda
-                                        ,@(cdr (mole-build-terminal
-                                                (list 'whitespace
-                                                      mole-default-whitespace-terminal)))))
-                         ,@(mapcar (lambda (p) `(list ',(car p)
+           'letrec (list
+                    ,@(mapcar (lambda (p) `(list ',(car p)
                                                  (cons 'lambda (cdr (mole-build-nonterminal ',p)))))
-                                   productions))
+                              productions))
            '(dolist (succ ',successes)
               (unless (consp succ)
                 (setq succ (cons succ (1+ (length succ)))))
@@ -120,8 +107,8 @@ FAILURES is a list of strings that NAME should not parse."
 (ert-deftest mole-basic-grammar-test ()
   "Test a very simple expression grammar."
   (let ((g (eval '(mole-create-grammar
-                   ((whitespace "[ \t\n\f]*"))
-                   ((expression product (* (or "\\+" "-") product))
+                   ((whitespace :lexical t "[ \t\n\f]*")
+                    (expression product (* (or "\\+" "-") product))
                     (product number (* (or "\\*" "/") number))
                     (number "[0-9]+")))
                  t)))

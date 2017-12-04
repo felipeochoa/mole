@@ -20,8 +20,7 @@
 (require 'subr-x)
 
 (defclass mole-grammar ()
-  ((terminals :initarg :terminals :accessor mole-grammar-terminals)
-   (nonterminals :initarg :nonterminals :accessor mole-grammar-nonterminals)))
+  ((nonterminals :initarg :nonterminals :accessor mole-grammar-nonterminals)))
 
 (defclass mole-node ()
   ((name :initarg :name :accessor mole-node-name)
@@ -84,18 +83,6 @@ no such chomping will be performed.")
           (cons nil spec)
         (setcdr tail nil)
         (cons config spec))))
-
-  (defun mole-build-terminal (spec)
-    "Return a (name args body) list for SPEC."
-    (cl-destructuring-bind (name re-or-kw &optional arg) spec
-      (list name ()
-            (cond
-             ((stringp re-or-kw) `(when (looking-at ,re-or-kw)
-                                    (goto-char (match-end 0))
-                                    (mole-node-literal :name ',name :string
-                                                       (match-string-no-properties 0))))
-             ((eq 'extern re-or-kw) `(funcall ,arg))
-             (t (error "Unknown terminal type %S" re-or-kw))))))
 
   (defun mole-build-nonterminal (spec)
     "Return a (name args body) list for SPEC."
@@ -194,38 +181,28 @@ The form evaluates to a blank `mole-node-literal' if
        (unless ,(mole-build-sequence productions)
          (mole-node-literal :name '?= :string "")))))
 
-(defvar mole-default-whitespace-terminal "[ \t\n\f]*"
+(defvar mole-default-whitespace-terminal '(whitespace :lexical t "[ \t\n\f]*")
   "If a grammar doesn't specify whitespace, this value will be used.")
 
-(defmacro mole-create-grammar (terminals nonterminals)
-  "Create a new grammar object with TERMINALS and NONTERMINALS."
-  (unless (cl-some (lambda (term) (eq 'whitespace (car term))) terminals)
-    (push mole-default-whitespace-terminal terminals))
-  `(let (,@(mapcar 'car nonterminals) ,@(mapcar 'car terminals))
-     ,@(mapcar (lambda (spec)
-                 (cl-destructuring-bind (name args body) (mole-build-terminal spec)
-                   `(setq ,name (lambda ,args ,body))))
-               terminals)
+(defmacro mole-create-grammar (nonterminals)
+  "Create a new grammar object with NONTERMINALS."
+  (unless (cl-some (lambda (term) (eq 'whitespace (car term))) nonterminals)
+    (push mole-default-whitespace-terminal nonterminals))
+  `(let (,@(mapcar 'car nonterminals))
      ,@(mapcar (lambda (spec)
                  (cl-destructuring-bind (name args body) (mole-build-nonterminal spec)
                    `(setq ,name (lambda ,args ,body))))
                nonterminals)
-     (mole-grammar :terminals (list ,@(mapcar (lambda (term)
-                                                `(cons ',(car term) ,(car term)))
-                                              terminals))
-                   :nonterminals (list ,@(mapcar (lambda (term)
+     (mole-grammar :nonterminals (list ,@(mapcar (lambda (term)
                                                    `(cons ',(car term) ,(car term)))
                                                  nonterminals)))))
 
 (defun mole-parse (grammar production)
   "Attempt to parse GRAMMAR's PRODUCTION starting at point."
   (save-excursion
-    (or
-     (when-let ((parser (assq production (mole-grammar-terminals grammar))))
-       (funcall (cdr parser)))
-     (when-let ((parser (assq production (mole-grammar-nonterminals grammar))))
-       (funcall (cdr parser)))
-     (error "Production %S not defined in grammar" production))))
+    (if-let ((parser (assq production (mole-grammar-nonterminals grammar))))
+        (funcall (cdr parser))
+      (error "Production %S not defined in grammar" production))))
 
 (defun mole-parse-string (grammar production string)
   "Attempt to parse GRAMMAR's PRODUCTION in STRING."
