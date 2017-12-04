@@ -133,15 +133,15 @@ one `mole-node' for each item in productions."
     (let ((res (make-symbol "res")))
       (if (null (cdr productions))
           ;; special-case single item sequences
-          `(when-let ((,res ,(mole-build-element (car productions)))) (list ,res)))
-      (let ((block-name (make-symbol "block-name")))
-        ;; ensure if any parse fails, go back to initial point
-        `(mole-maybe-save-excursion
-           (cl-block ,block-name
-             (list ,@(mapcar (lambda (prod)
-                               `(or ,(mole-build-element prod)
-                                    (cl-return-from ,block-name)))
-                             productions)))))))
+          `(when-let ((,res ,(mole-build-element (car productions)))) (list ,res))
+        (let ((block-name (make-symbol "block-name")))
+          ;; ensure if any parse fails, go back to initial point
+          `(mole-maybe-save-excursion
+             (cl-block ,block-name
+               (list ,@(mapcar (lambda (prod)
+                                 `(or ,(mole-build-element prod)
+                                      (cl-return-from ,block-name)))
+                               productions))))))))
 
   (defun mole-build-zero-or-more (productions)
     "Return a form that evaluates to zero or more PRODUCTIONS instances."
