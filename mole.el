@@ -60,6 +60,10 @@
     (goto-char (match-end 0))
     (match-string-no-properties 0)))
 
+(defun mole-parse-success-p (result)
+  "Return t if RESULT indicates a successful parse."
+  result)
+
 (defvar mole-runtime-force-lexical nil
   "If t, even non-lexical productions will not chomp whitespace.")
 
@@ -129,15 +133,20 @@ one `mole-node' for each item in productions."
     (let ((res (make-symbol "res")))
       (if (null (cdr productions))
           ;; special-case single item sequences
-          `(when-let ((,res ,(mole-build-element (car productions)))) (list ,res))
+          `(let ((,res ,(mole-build-element (car productions))))
+             (when (mole-parse-success-p ,res)
+                 (list ,res)))
         (let ((block-name (make-symbol "block-name")))
           ;; ensure if any parse fails, go back to initial point
           `(mole-maybe-save-excursion
-             (cl-block ,block-name
+             (let (,res)
+              (cl-block ,block-name
                (list ,@(mapcar (lambda (prod)
-                                 `(or ,(mole-build-element prod)
-                                      (cl-return-from ,block-name)))
-                               productions))))))))
+                                 `(if (mole-parse-success-p
+                                       (setq ,res ,(mole-build-element prod)))
+                                      ,res
+                                    (cl-return-from ,block-name ,res)))
+                               productions)))))))))
 
   (defun mole-build-sequence-operator (productions)
     "Like `mole-build-sequence', but returning a `mole-node-operator'."
@@ -152,7 +161,7 @@ one `mole-node' for each item in productions."
           (star-items (make-symbol "star-items"))
           (production-form (mole-build-sequence productions)))
       `(let (,item ,star-items)
-         (while (setq ,item ,production-form)
+         (while (mole-parse-success-p (setq ,item ,production-form))
            (setq ,star-items (nconc ,star-items ,item)))
          (mole-node-operator :name '* :children ,star-items))))
 
@@ -162,7 +171,7 @@ one `mole-node' for each item in productions."
           (star-items (make-symbol "star-items"))
           (production-form (mole-build-sequence productions)))
       `(let (,item ,star-items)
-         (while (setq ,item ,production-form)
+         (while (mole-parse-success-p (setq ,item ,production-form))
            (setq ,star-items (nconc ,star-items ,item)))
          (when ,star-items
            (mole-node-operator :name '+ :children ,star-items)))))
@@ -174,14 +183,19 @@ one `mole-node' for each item in productions."
 
   (defun mole-build-or (productions)
     "Return a form for evaluating a disjunction between productions."
-    `(or ,@(mapcar 'mole-build-element productions)))
+    (let ((child (make-symbol "child")))
+      `(let (,child)
+         (or ,@(mapcar (lambda (prod)
+                         `(when (mole-parse-success-p (setq ,child ,(mole-build-element prod)))
+                            ,child))
+                       productions)))))
 
   (defun mole-build-lookahead (productions)
     "Return a form for evaluating PRODUCTIONS in `save-excursion'.
 The form evaluates to \"\" if `production-form' evaluates to a
 non-nil value, or nil otherwise."
     `(save-excursion
-       (when ,(mole-build-sequence productions)
+       (when (mole-parse-success-p ,(mole-build-sequence productions))
          "")))
 
   (defun mole-build-negative-lookahead (productions)
@@ -189,7 +203,7 @@ non-nil value, or nil otherwise."
 The form evaluates to \"\" if `production-form' evaluates to nil,
 or nil otherwise."
     `(save-excursion
-       (unless ,(mole-build-sequence productions)
+       (unless (mole-parse-success-p ,(mole-build-sequence productions))
          "")))
 
   (defun mole-build-repetition (productions)
@@ -210,7 +224,7 @@ well."
       `(mole-maybe-save-excursion
          (let ((,num 0) ,child ,children)
            (while (and (< ,num ,max)
-                       (setq ,child ,(mole-build-sequence productions)))
+                       (mole-parse-success-p (setq ,child ,(mole-build-sequence productions))))
              (push ,child ,children)
              (cl-incf ,num))
            (when (>= ,num ,min)

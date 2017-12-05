@@ -59,12 +59,12 @@ FAILURES is a list of strings that NAME should not parse."
               (unless (consp succ)
                 (setq succ (cons succ (1+ (length succ)))))
               (erase-buffer) (insert (car succ)) (goto-char (point-min))
-              (should (funcall ,firstname))
+              (should (mole-parse-success-p (funcall ,firstname)))
               (should (eq (point) (cdr succ))))
            ,(when failures
               `'(dolist (f ',failures)
                   (erase-buffer) (insert f) (goto-char (point-min))
-                  (should (null (funcall ,firstname)))
+                  (should (null (mole-parse-success-p (funcall ,firstname))))
                   (should (bobp)))))
           t)))))
 
