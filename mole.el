@@ -26,9 +26,6 @@
   ((name :initarg :name :accessor mole-node-name)
    (children :initarg :children :accessor mole-node-children)))
 
-(defclass mole-node-literal (mole-node)
-  ((string :initarg :string :accessor mole-node-literal-string)))
-
 (defclass mole-node-operator (mole-node) ()
   "Node class for *, +, etc.")
 
@@ -41,11 +38,9 @@
                        (list (mole-node-to-sexp child))))
                    (mole-node-children node))))
 
-(cl-defmethod mole-node-to-sexp ((literal mole-node-literal))
+(cl-defmethod mole-node-to-sexp ((literal string))
   "Convert LITERAL into a test-friendly sexp."
-  (if (slot-boundp literal 'name)
-      (list (mole-node-name literal) (mole-node-literal-string literal))
-    (mole-node-literal-string literal)))
+  literal)
 
 (cl-defmethod mole-node-to-sexp ((op mole-node-operator))
   "Convert OP into a test-friendly sexp."
@@ -63,7 +58,7 @@
   "Return a new anonymous literal if looking at REGEXP at point."
   (when (looking-at regexp)
     (goto-char (match-end 0))
-    (mole-node-literal :string (match-string-no-properties 0))))
+    (match-string-no-properties 0)))
 
 (defvar mole-runtime-force-lexical nil
   "If t, even non-lexical productions will not chomp whitespace.")
@@ -176,20 +171,19 @@ one `mole-node' for each item in productions."
 
   (defun mole-build-lookahead (productions)
     "Return a form for evaluating PRODUCTIONS in `save-excursion'.
-The form evaluates to a blank `mole-node-literal' if
-`production-form' evaluates to a non-nil value, or nil
-otherwise."
+The form evaluates to \"\" if `production-form' evaluates to a
+non-nil value, or nil otherwise."
     `(save-excursion
        (when ,(mole-build-sequence productions)
-         (mole-node-literal :name '?= :string ""))))
+         "")))
 
   (defun mole-build-negative-lookahead (productions)
     "Return a form for evaluating PRODUCTION-FORM in `save-excursion'.
-The form evaluates to a blank `mole-node-literal' if
-`production-form' evaluates to nil, or nil otherwise."
+The form evaluates to \"\" if `production-form' evaluates to nil,
+or nil otherwise."
     `(save-excursion
        (unless ,(mole-build-sequence productions)
-         (mole-node-literal :name '?= :string ""))))
+         "")))
 
   (defun mole-build-repetition (productions)
     "Return a form for evaluating PRODUCTIONS multiple times.
