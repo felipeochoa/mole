@@ -221,7 +221,7 @@ access to the productions, which are funcallable by their name."
     `(apply ,fn (list ,@args)))
   )
 
-(defvar mole-default-whitespace-terminal '(whitespace :lexical t "[ \t\n\f]*")
+(defvar mole-default-whitespace-terminal '(whitespace (:lexical t) ("[ \t\n\f]*"))
   "If a grammar doesn't specify whitespace, this value will be used.")
 
 (defmacro mole-create-grammar (&rest productions)
