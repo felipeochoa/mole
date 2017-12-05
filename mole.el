@@ -108,7 +108,7 @@ when creating a new grammar.")
      ((stringp production) `(mole-parse-anonymous-literal ,production))
      ((consp production)
       (pcase (car production)
-        (': (mole-build-sequence (cdr production)))
+        (': (mole-build-sequence-operator (cdr production)))
         ('or (mole-build-or (cdr production)))
         ('* (mole-build-zero-or-more (cdr production)))
         ('+ (mole-build-one-or-more (cdr production)))
@@ -138,6 +138,13 @@ one `mole-node' for each item in productions."
                                  `(or ,(mole-build-element prod)
                                       (cl-return-from ,block-name)))
                                productions))))))))
+
+  (defun mole-build-sequence-operator (productions)
+    "Like `mole-build-sequence', but returning a `mole-node-operator'."
+    (let ((res (make-symbol "res")))
+      `(let ((,res ,(mole-build-sequence productions)))
+         (when (mole-parse-success-p ,res)
+           (mole-node-operator :name ': :children ,res)))))
 
   (defun mole-build-zero-or-more (productions)
     "Return a form that evaluates to zero or more PRODUCTIONS instances."
