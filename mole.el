@@ -139,9 +139,8 @@ when creating a new grammar.")
 
   (defun mole-build-sequence (productions)
     "Compile PRODUCTIONS into sequenced calls to each.
-The resulting form always evaluates to a list. If the sequence of
-productions failed, the list will be nil. Otherwise, it will have
-one `mole-node' for each item in productions."
+The resulting form will be a list of `mole-node's and literals;
+one for each item in productions."
     (let ((res (make-symbol "res")))
       (if (null (cdr productions))
           ;; special-case single item sequences
