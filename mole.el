@@ -22,20 +22,17 @@
   '(whitespace (:lexical t) (* (or " " "\t" "\n" "\f")))
   "If a grammar doesn't specify whitespace, this value will be used.")
 
-(eval-and-compile
-  (defvar mole-production-keys '(:lexical)
-    "List of keys that may be given in a production definition.
+(defvar mole-production-keys '(:lexical)
+  "List of keys that may be given in a production definition.
 :LEXICAL if nil, has productions chomp whitespace and comments
-before attempting a match and after a successful match. If t,
-no such chomping will be performed.")
+before attempting a match and after a successful match.  If t, no
+such chomping will be performed.")
 
-  (defvar mole-default-props '()
-    "Plist of `mole-production-keys' to use as defaults values
-when creating a new grammar.")
+(defvar mole-default-props '()
+  "Plist of `mole-production-keys' to use as defaults values.")
 
-  (defvar mole-runtime-force-lexical nil
-    "If t, even non-lexical productions will not chomp whitespace.")
-  )
+(defvar mole-runtime-force-lexical nil
+  "If t, even non-lexical productions will not chomp whitespace.")
 
 (cl-defstruct mole-grammar productions)
 
