@@ -76,6 +76,18 @@ FAILURES is a list of strings that NAME should not parse."
   ("teeeest")
   ("" "teeees"))
 
+(mole-define-production-test ((char (or char1 char2 char3 char4))
+                              (char1 (char "ab"))
+                              (char2 (char ?x ?y))
+                              (char3 (char (?0 . ?9)))
+                              (char4 (char "m-q")))
+  (("ab" . 2) ("ba" . 2) ("xy" . 2) ("yx" . 2) "m" "n" "o" "p" "q")
+  ("" "t"))
+
+(mole-define-production-test ((char-class (+ (char hex-digit))))
+  ("1234567890abcdef" "1234567890ABCDEF")
+  ("" "xyz"))
+
 (mole-define-production-test ((zero-or-more (* "t" "a")))
   ("" "tatatata" ("xx" . 1)))
 
@@ -152,10 +164,10 @@ NUM PRODUCTION: appease flycheck."
 (ert-deftest mole-basic-grammar-test ()
   "Test a very simple expression grammar."
   (let ((g (eval `(mole-create-grammar
-                   (whitespace :lexical t (* (or " " "\t" "\n" "\f")))
+                   (whitespace :lexical t (* (char " \t\n\f")))
                    (expression product (* (or "+" "-") product))
                    (product number (* (or "*" "/") number))
-                   (number (+ (or "0" "1" "2" "3" "4" "5" "6" "7" "8" "9"))))
+                   (number (+ (char "0-9"))))
                  t)))
     (should (equal (mole-node-to-sexp (mole-parse-string g 'expression "3 \t+ 22 * 6"))
                    '(expression
@@ -167,7 +179,7 @@ NUM PRODUCTION: appease flycheck."
   "Test a grammar with various defaults plists"
   (let ((g (eval `(mole-create-grammar
                    :lexical t
-                   (whitespace (* (or " " "\t" "\n" "\f")))
+                   (whitespace (* (char " \t\n\f")))
                    (a "a")
                    :lexical nil
                    (b "b")

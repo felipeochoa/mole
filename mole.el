@@ -19,7 +19,7 @@
 (require 'subr-x)
 
 (defvar mole-default-whitespace-terminal
-  '(whitespace (:lexical t) (* (or " " "\t" "\n" "\f")))
+  '(whitespace (:lexical t) (* (char " \t\n\f")))
   "If a grammar doesn't specify whitespace, this value will be used.")
 
 (defvar mole-production-keys '(:lexical)
@@ -129,6 +129,7 @@ such chomping will be performed.")
         ('? (mole-build-zero-or-one (cdr production)))
         ('?= (mole-build-lookahead (cdr production)))
         ('?! (mole-build-negative-lookahead (cdr production)))
+        ('char (mole-build-char (cdr production)))
         ('lexical (mole-build-lexical (cdr production)))
         ('extern (mole-build-extern (cdr production)))
         ((pred numberp) (mole-build-repetition production))
@@ -253,6 +254,10 @@ well."
     "Return a form for evaluation PRODUCTIONS, but in a lexical environment."
     `(let ((mole-runtime-force-lexical t))
        ,(mole-build-sequence productions)))
+
+  (defun mole-build-char (sets)
+    "Return a form for matching SETS of characters, like using char in `rx'."
+    `(mole-parse-anonymous-literal (rx (char ,@sets))))
 
   (cl-defun mole-build-extern ((fn &rest args))
     "Build a custom matcher calling FN with ARGS.
