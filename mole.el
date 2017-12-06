@@ -42,6 +42,10 @@
   "Convert LITERAL into a test-friendly sexp."
   literal)
 
+(cl-defmethod mole-node-to-sexp ((_ (eql fail)))
+  "Return 'fail if the parse failed."
+  'fail)
+
 (cl-defmethod mole-node-to-sexp ((op mole-node-operator))
   "Convert OP into a test-friendly sexp."
   (mapcar 'mole-node-to-sexp (mole-node-children op)))
@@ -49,20 +53,23 @@
 (defmacro mole-maybe-save-excursion (&rest body)
   "Execute BODY and restore point unless return value is non-nil."
   (declare (debug (&rest form)) (indent defun))
-  (let ((point (make-symbol "point")))
-    `(let ((,point (point)))
-       (or (progn ,@body)
-           (progn (goto-char ,point) nil)))))
+  (let ((point (make-symbol "point")) (res (make-symbol "res")))
+    `(let ((,point (point))
+           (,res (progn ,@body)))
+       (unless (mole-parse-success-p ,res)
+         (goto-char ,point))
+       ,res)))
 
 (defun mole-parse-anonymous-literal (regexp)
   "Return a new anonymous literal if looking at REGEXP at point."
-  (when (looking-at regexp)
-    (goto-char (match-end 0))
-    (match-string-no-properties 0)))
+  (if (looking-at regexp)
+      (progn (goto-char (match-end 0))
+             (match-string-no-properties 0))
+    'fail))
 
 (defun mole-parse-success-p (result)
   "Return t if RESULT indicates a successful parse."
-  result)
+  (not (eq result 'fail)))
 
 (defvar mole-runtime-force-lexical nil
   "If t, even non-lexical productions will not chomp whitespace.")
@@ -97,13 +104,17 @@ when creating a new grammar.")
             (lexical (plist-get props :lexical)))
         (list name ()
               (if lexical
-                  `(when-let (,children  ,(mole-build-sequence args))
-                     (mole-node :name ',name :children ,children))
+                  `(let ((,children ,(mole-build-sequence args)))
+                     (if (mole-parse-success-p ,children)
+                         (mole-node :name ',name :children ,children)
+                       'fail))
                 `(mole-maybe-save-excursion
                    (or mole-runtime-force-lexical (funcall whitespace))
-                   (when-let (,children  ,(mole-build-sequence args))
-                     (or mole-runtime-force-lexical (funcall whitespace))
-                     (mole-node :name ',name :children ,children))))))))
+                   (let ((,children ,(mole-build-sequence args)))
+                     (if (mole-parse-success-p ,children)
+                         (progn (or mole-runtime-force-lexical (funcall whitespace))
+                                (mole-node :name ',name :children ,children))
+                       'fail))))))))
 
   (defun mole-build-element (production)
     "Compile PRODUCTION into recursive calls."
@@ -134,8 +145,9 @@ one `mole-node' for each item in productions."
       (if (null (cdr productions))
           ;; special-case single item sequences
           `(let ((,res ,(mole-build-element (car productions))))
-             (when (mole-parse-success-p ,res)
-                 (list ,res)))
+             (if (mole-parse-success-p ,res)
+                 (list ,res)
+               ,res))
         (let ((block-name (make-symbol "block-name")))
           ;; ensure if any parse fails, go back to initial point
           `(mole-maybe-save-excursion
@@ -152,8 +164,9 @@ one `mole-node' for each item in productions."
     "Like `mole-build-sequence', but returning a `mole-node-operator'."
     (let ((res (make-symbol "res")))
       `(let ((,res ,(mole-build-sequence productions)))
-         (when (mole-parse-success-p ,res)
-           (mole-node-operator :name ': :children ,res)))))
+         (if (mole-parse-success-p ,res)
+             (mole-node-operator :name ': :children ,res)
+           ,res))))
 
   (defun mole-build-zero-or-more (productions)
     "Return a form that evaluates to zero or more PRODUCTIONS instances."
@@ -173,13 +186,17 @@ one `mole-node' for each item in productions."
       `(let (,item ,star-items)
          (while (mole-parse-success-p (setq ,item ,production-form))
            (setq ,star-items (nconc ,star-items ,item)))
-         (when ,star-items
-           (mole-node-operator :name '+ :children ,star-items)))))
+         (if ,star-items
+             (mole-node-operator :name '+ :children ,star-items)
+           'fail))))
 
   (defun mole-build-zero-or-one (productions)
     "Return a form that evaluates to zero or one PRODUCTIONS instances."
-    (let ((production-form (mole-build-sequence productions)))
-      `(mole-node-operator :name '? :children ,production-form)))
+    (let ((res (make-symbol "res")))
+      `(let ((,res ,(mole-build-sequence productions)))
+         (mole-node-operator
+          :name '?
+          :children (if (mole-parse-success-p ,res) ,res nil)))))
 
   (defun mole-build-or (productions)
     "Return a form for evaluating a disjunction between productions."
@@ -188,22 +205,25 @@ one `mole-node' for each item in productions."
          (or ,@(mapcar (lambda (prod)
                          `(when (mole-parse-success-p (setq ,child ,(mole-build-element prod)))
                             ,child))
-                       productions)))))
+                       productions)
+             'fail))))
 
   (defun mole-build-lookahead (productions)
     "Return a form for evaluating PRODUCTIONS in `save-excursion'.
 The form evaluates to \"\" if `production-form' evaluates to a
 non-nil value, or nil otherwise."
     `(save-excursion
-       (when (mole-parse-success-p ,(mole-build-sequence productions))
-         "")))
+       (if (mole-parse-success-p ,(mole-build-sequence productions))
+           ""
+         'fail)))
 
   (defun mole-build-negative-lookahead (productions)
     "Return a form for evaluating PRODUCTION-FORM in `save-excursion'.
 The form evaluates to \"\" if `production-form' evaluates to nil,
 or nil otherwise."
     `(save-excursion
-       (unless (mole-parse-success-p ,(mole-build-sequence productions))
+       (if (mole-parse-success-p ,(mole-build-sequence productions))
+           'fail
          "")))
 
   (defun mole-build-repetition (productions)
@@ -227,8 +247,9 @@ well."
                        (mole-parse-success-p (setq ,child ,(mole-build-sequence productions))))
              (push ,child ,children)
              (cl-incf ,num))
-           (when (>= ,num ,min)
-             (mole-node-operator :name 'repetition :children (nreverse ,children)))))))
+           (if (>= ,num ,min)
+               (mole-node-operator :name 'repetition :children (nreverse ,children))
+             'fail)))))
 
   (defun mole-build-lexical (productions)
     "Return a form for evaluation PRODUCTIONS, but in a lexical environment."

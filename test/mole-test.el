@@ -111,12 +111,14 @@ FAILURES is a list of strings that NAME should not parse."
 NUM PRODUCTION: appease flycheck."
   (should (= num 1))
   (mole-maybe-save-excursion
-    (let (r1 r2 r3)
-      (setq r1 (funcall production))
-      (when (and r1 (looking-at-p "xyz"))
-        (setq r2 "xyz") (forward-char 3)
-        (setq r3 (funcall production))
-        (when r3 (mole-node :name 'custom-name :children (list r1 r2 r3)))))))
+    (or
+     (let (r1 r2 r3)
+       (setq r1 (funcall production))
+       (when (and r1 (looking-at-p "xyz"))
+         (setq r2 "xyz") (forward-char 3)
+         (setq r3 (funcall production))
+         (when r3 (mole-node :name 'custom-name :children (list r1 r2 r3)))))
+     'fail)))
 
 (mole-define-production-test ((extern (extern 'mole-extern-test-fn 1 non-lexical))
                               (non-lexical "a"))
@@ -175,11 +177,11 @@ NUM PRODUCTION: appease flycheck."
                  t)))
 
     (should (equal (mole-node-to-sexp (mole-parse-string g 'a "a")) '(a "a")))
-    (should-not (mole-parse-string g 'a " a"))
+    (should (equal (mole-node-to-sexp (mole-parse-string g 'a " a")) 'fail))
     (should (equal (mole-node-to-sexp (mole-parse-string g 'b " b  ")) '(b "b")))
     (should (equal (mole-node-to-sexp (mole-parse-string g 'c " c  ")) '(c "c")))
     (should (equal (mole-node-to-sexp (mole-parse-string g 'd "d")) '(d "d")))
-    (should-not (mole-parse-string g 'd " d"))))
+    (should (equal (mole-node-to-sexp (mole-parse-string g 'd " d")) 'fail))))
 
 (provide 'mole-tests)
 ;;; mole-test.el ends here
