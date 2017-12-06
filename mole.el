@@ -19,6 +19,24 @@
 (require 'cl-lib)
 (require 'subr-x)
 
+(defvar mole-default-whitespace-terminal '(whitespace (:lexical t) ("[ \t\n\f]*"))
+  "If a grammar doesn't specify whitespace, this value will be used.")
+
+(eval-and-compile
+  (defvar mole-production-keys '(:lexical)
+    "List of keys that may be given in a production definition.
+:LEXICAL if nil, has productions chomp whitespace and comments
+before attempting a match and after a successful match. If t,
+no such chomping will be performed.")
+
+  (defvar mole-default-props '()
+    "Plist of `mole-production-keys' to use as defaults values
+when creating a new grammar.")
+
+  (defvar mole-runtime-force-lexical nil
+    "If t, even non-lexical productions will not chomp whitespace.")
+  )
+
 (defclass mole-grammar ()
   ((productions :initarg :productions :accessor mole-grammar-productions)))
 
@@ -71,20 +89,7 @@
   "Return t if RESULT indicates a successful parse."
   (not (eq result 'fail)))
 
-(defvar mole-runtime-force-lexical nil
-  "If t, even non-lexical productions will not chomp whitespace.")
-
 (eval-and-compile
-  (defvar mole-production-keys '(:lexical)
-    "List of keys that may be given in a production definition.
-:LEXICAL if nil, has productions chomp whitespace and comments
-before attempting a match and after a successful match. If t,
-no such chomping will be performed.")
-
-  (defvar mole-default-props '()
-    "Plist of `mole-production-keys' to use as defaults values
-when creating a new grammar.")
-
   (defun mole-split-spec-args (spec)
     "Split out config keys from SPEC."
     (setq spec (append spec nil))
@@ -262,9 +267,6 @@ ARGS is evaluated in the scope of the grammar builder, so it has
 access to the productions, which are funcallable by their name."
     `(apply ,fn (list ,@args)))
   )
-
-(defvar mole-default-whitespace-terminal '(whitespace (:lexical t) ("[ \t\n\f]*"))
-  "If a grammar doesn't specify whitespace, this value will be used.")
 
 (defmacro mole-create-grammar (&rest productions)
   "Create a new grammar object with PRODUCTIONS."
