@@ -117,7 +117,7 @@ NUM PRODUCTION: appease flycheck."
        (when (and r1 (looking-at-p "xyz"))
          (setq r2 "xyz") (forward-char 3)
          (setq r3 (funcall production))
-         (when r3 (mole-node :name 'custom-name :children (list r1 r2 r3)))))
+         (when r3 (make-mole-node :name 'custom-name :children (list r1 r2 r3)))))
      'fail)))
 
 (mole-define-production-test ((extern (extern 'mole-extern-test-fn 1 non-lexical))

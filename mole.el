@@ -15,7 +15,6 @@
 
 ;;; Code:
 
-(require 'eieio)
 (require 'cl-lib)
 (require 'subr-x)
 
@@ -37,14 +36,11 @@ when creating a new grammar.")
     "If t, even non-lexical productions will not chomp whitespace.")
   )
 
-(defclass mole-grammar ()
-  ((productions :initarg :productions :accessor mole-grammar-productions)))
+(cl-defstruct mole-grammar productions)
 
-(defclass mole-node ()
-  ((name :initarg :name :accessor mole-node-name)
-   (children :initarg :children :accessor mole-node-children)))
+(cl-defstruct mole-node name children)
 
-(defclass mole-node-operator (mole-node) ()
+(cl-defstruct (mole-node-operator (:include mole-node))
   "Node class for *, +, etc.")
 
 (cl-defmethod mole-node-to-sexp ((node mole-node))
@@ -111,14 +107,14 @@ when creating a new grammar.")
               (if lexical
                   `(let ((,children ,(mole-build-sequence args)))
                      (if (mole-parse-success-p ,children)
-                         (mole-node :name ',name :children ,children)
+                         (make-mole-node :name ',name :children ,children)
                        'fail))
                 `(mole-maybe-save-excursion
                    (or mole-runtime-force-lexical (funcall whitespace))
                    (let ((,children ,(mole-build-sequence args)))
                      (if (mole-parse-success-p ,children)
                          (progn (or mole-runtime-force-lexical (funcall whitespace))
-                                (mole-node :name ',name :children ,children))
+                                (make-mole-node :name ',name :children ,children))
                        'fail))))))))
 
   (defun mole-build-element (production)
@@ -170,7 +166,7 @@ one `mole-node' for each item in productions."
     (let ((res (make-symbol "res")))
       `(let ((,res ,(mole-build-sequence productions)))
          (if (mole-parse-success-p ,res)
-             (mole-node-operator :name ': :children ,res)
+             (make-mole-node-operator :name ': :children ,res)
            ,res))))
 
   (defun mole-build-zero-or-more (productions)
@@ -181,7 +177,7 @@ one `mole-node' for each item in productions."
       `(let (,item ,star-items)
          (while (mole-parse-success-p (setq ,item ,production-form))
            (setq ,star-items (nconc ,star-items ,item)))
-         (mole-node-operator :name '* :children ,star-items))))
+         (make-mole-node-operator :name '* :children ,star-items))))
 
   (defun mole-build-one-or-more (productions)
     "Return a form that evaluates to one or more PRODUCTIONS instances."
@@ -192,14 +188,14 @@ one `mole-node' for each item in productions."
          (while (mole-parse-success-p (setq ,item ,production-form))
            (setq ,star-items (nconc ,star-items ,item)))
          (if ,star-items
-             (mole-node-operator :name '+ :children ,star-items)
+             (make-mole-node-operator :name '+ :children ,star-items)
            'fail))))
 
   (defun mole-build-zero-or-one (productions)
     "Return a form that evaluates to zero or one PRODUCTIONS instances."
     (let ((res (make-symbol "res")))
       `(let ((,res ,(mole-build-sequence productions)))
-         (mole-node-operator
+         (make-mole-node-operator
           :name '?
           :children (if (mole-parse-success-p ,res) ,res nil)))))
 
@@ -253,7 +249,7 @@ well."
              (push ,child ,children)
              (cl-incf ,num))
            (if (>= ,num ,min)
-               (mole-node-operator :name 'repetition :children (nreverse ,children))
+               (make-mole-node-operator :name 'repetition :children (nreverse ,children))
              'fail)))))
 
   (defun mole-build-lexical (productions)
@@ -281,9 +277,9 @@ access to the productions, which are funcallable by their name."
                  (cl-destructuring-bind (name args body) (mole-build-production spec)
                    `(setq ,name (lambda ,args ,body))))
                productions)
-     (mole-grammar :productions (list ,@(mapcar (lambda (term)
-                                                  `(cons ',(car term) ,(car term)))
-                                                productions)))))
+     (make-mole-grammar :productions (list ,@(mapcar (lambda (term)
+                                                       `(cons ',(car term) ,(car term)))
+                                                     productions)))))
 
 (defun mole-munge-productions (productions)
   "Munge PRODUCTIONS from the user-friendly format into a list of specs."
