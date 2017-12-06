@@ -18,7 +18,8 @@
 (require 'cl-lib)
 (require 'subr-x)
 
-(defvar mole-default-whitespace-terminal '(whitespace (:lexical t) ("[ \t\n\f]*"))
+(defvar mole-default-whitespace-terminal
+  '(whitespace (:lexical t) (* (or " " "\t" "\n" "\f")))
   "If a grammar doesn't specify whitespace, this value will be used.")
 
 (eval-and-compile
@@ -121,7 +122,7 @@ when creating a new grammar.")
     "Compile PRODUCTION into recursive calls."
     (cond
      ((symbolp production) `(funcall ,production))
-     ((stringp production) `(mole-parse-anonymous-literal ,production))
+     ((stringp production) `(mole-parse-anonymous-literal ,(regexp-quote production)))
      ((consp production)
       (pcase (car production)
         (': (mole-build-sequence-operator (cdr production)))

@@ -68,11 +68,11 @@ FAILURES is a list of strings that NAME should not parse."
                   (should (bobp)))))
           t)))))
 
-(mole-define-production-test ((sequence "t" "e+" "st"))
+(mole-define-production-test ((sequence "t" (+ "e") "st"))
   ("teeeest")
   ("" "teeees"))
 
-(mole-define-production-test ((sequence-operator (: "t" "e+" "st")))
+(mole-define-production-test ((sequence-operator (: "t" (+ "e") "st")))
   ("teeeest")
   ("" "teeees"))
 
@@ -145,29 +145,29 @@ NUM PRODUCTION: appease flycheck."
 (ert-deftest mole-whitespace-nonlexical-error ()
   "Ensure `mole-create-grammar' errors if whitespace is non-lexical."
   (let ((err (should-error (eval `(mole-create-grammar
-                                   (whitespace " *")
+                                   (whitespace (* " "))
                                    (term "a"))))))
     (should (string-match-p "lexical" (cadr err)))))
 
 (ert-deftest mole-basic-grammar-test ()
   "Test a very simple expression grammar."
-  (let ((g (eval '(mole-create-grammar
-                   (whitespace :lexical t "[ \t\n\f]*")
-                   (expression product (* (or "\\+" "-") product))
-                   (product number (* (or "\\*" "/") number))
-                   (number "[0-9]+"))
+  (let ((g (eval `(mole-create-grammar
+                   (whitespace :lexical t (* (or " " "\t" "\n" "\f")))
+                   (expression product (* (or "+" "-") product))
+                   (product number (* (or "*" "/") number))
+                   (number (+ (or "0" "1" "2" "3" "4" "5" "6" "7" "8" "9"))))
                  t)))
-    (should (equal (mole-node-to-sexp (mole-parse-string g 'expression "3 + 2 * 6"))
+    (should (equal (mole-node-to-sexp (mole-parse-string g 'expression "3 \t+ 22 * 6"))
                    '(expression
                      (product (number "3"))
                      "+"
-                     (product (number "2") "*" (number "6")))))))
+                     (product (number "2" "2") "*" (number "6")))))))
 
 (ert-deftest mole-grammar-varying-defaults ()
   "Test a grammar with various defaults plists"
   (let ((g (eval `(mole-create-grammar
                    :lexical t
-                   (whitespace "[ \t\n\f]*")
+                   (whitespace (* (or " " "\t" "\n" "\f")))
                    (a "a")
                    :lexical nil
                    (b "b")
