@@ -62,6 +62,21 @@ such chomping will be performed.")
   "Convert OP into a test-friendly sexp."
   (mapcar 'mole-node-to-sexp (mole-node-children op)))
 
+(defun mole-parse-success-p (result)
+  "Return t if RESULT indicates a successful parse."
+  (not (eq result 'fail)))
+
+(cl-defmacro mole-parse-match ((form res-sym) on-success &optional on-fail)
+  "Execute FORM and conditionally execute a followup action.
+RES-SYM is bound to the result of FORM.  If FORM is a successful
+parse, execute ON-SUCCESS.  Otherwise execute ON-FAIL. ON-FAIL
+defaults to simply returning 'fail."
+  (declare (debug ((form symbol) form form)) (indent 1))
+  `(let ((,res-sym ,form))
+     (if (mole-parse-success-p ,res-sym)
+         ,on-success
+       ,on-fail)))
+
 (defmacro mole-maybe-save-excursion (&rest body)
   "Execute BODY and restore point unless return value is non-nil."
   (declare (debug (&rest form)) (indent defun))
@@ -78,10 +93,6 @@ such chomping will be performed.")
       (progn (goto-char (match-end 0))
              (match-string-no-properties 0))
     'fail))
-
-(defun mole-parse-success-p (result)
-  "Return t if RESULT indicates a successful parse."
-  (not (eq result 'fail)))
 
 (eval-and-compile
   (defun mole-split-spec-args (spec)
@@ -103,17 +114,15 @@ such chomping will be performed.")
             (lexical (plist-get props :lexical)))
         (list name ()
               (if lexical
-                  `(let ((,children ,(mole-build-sequence args)))
-                     (if (mole-parse-success-p ,children)
-                         (make-mole-node :name ',name :children ,children)
-                       'fail))
+                  `(mole-parse-match (,(mole-build-sequence args) ,children)
+                     (make-mole-node :name ',name :children ,children)
+                     'fail)
                 `(mole-maybe-save-excursion
                    (or mole-runtime-force-lexical (funcall whitespace))
-                   (let ((,children ,(mole-build-sequence args)))
-                     (if (mole-parse-success-p ,children)
-                         (progn (or mole-runtime-force-lexical (funcall whitespace))
-                                (make-mole-node :name ',name :children ,children))
-                       'fail))))))))
+                   (mole-parse-match (,(mole-build-sequence args) ,children)
+                     (progn (or mole-runtime-force-lexical (funcall whitespace))
+                            (make-mole-node :name ',name :children ,children))
+                     'fail)))))))
 
   (defun mole-build-element (production)
     "Compile PRODUCTION into recursive calls."
@@ -143,29 +152,26 @@ one for each item in productions."
     (let ((res (make-symbol "res")))
       (if (null (cdr productions))
           ;; special-case single item sequences
-          `(let ((,res ,(mole-build-element (car productions))))
-             (if (mole-parse-success-p ,res)
-                 (list ,res)
-               ,res))
+          `(mole-parse-match (,(mole-build-element (car productions)) ,res)
+             (list ,res)
+             'fail)
         (let ((block-name (make-symbol "block-name")))
           ;; ensure if any parse fails, go back to initial point
           `(mole-maybe-save-excursion
-             (let (,res)
-              (cl-block ,block-name
-               (list ,@(mapcar (lambda (prod)
-                                 `(if (mole-parse-success-p
-                                       (setq ,res ,(mole-build-element prod)))
-                                      ,res
-                                    (cl-return-from ,block-name ,res)))
-                               productions)))))))))
+             (cl-block ,block-name
+               (list
+                ,@(mapcar (lambda (prod)
+                            `(mole-parse-match (,(mole-build-element prod) ,res)
+                               ,res
+                               (cl-return-from ,block-name ,res)))
+                          productions))))))))
 
   (defun mole-build-sequence-operator (productions)
     "Like `mole-build-sequence', but returning a `mole-node-operator'."
     (let ((res (make-symbol "res")))
-      `(let ((,res ,(mole-build-sequence productions)))
-         (if (mole-parse-success-p ,res)
-             (make-mole-node-operator :name ': :children ,res)
-           ,res))))
+      `(mole-parse-match (,(mole-build-sequence productions) ,res)
+         (make-mole-node-operator :name ': :children ,res)
+         'fail)))
 
   (defun mole-build-zero-or-more (productions)
     "Return a form that evaluates to zero or more PRODUCTIONS instances."
@@ -192,38 +198,35 @@ one for each item in productions."
   (defun mole-build-zero-or-one (productions)
     "Return a form that evaluates to zero or one PRODUCTIONS instances."
     (let ((res (make-symbol "res")))
-      `(let ((,res ,(mole-build-sequence productions)))
-         (make-mole-node-operator
-          :name '?
-          :children (if (mole-parse-success-p ,res) ,res nil)))))
+      `(make-mole-node-operator
+        :name '?
+        :children (mole-parse-match (,(mole-build-sequence productions) ,res)
+                    ,res nil))))
 
   (defun mole-build-or (productions)
     "Return a form for evaluating a disjunction between productions."
     (let ((child (make-symbol "child")))
-      `(let (,child)
-         (or ,@(mapcar (lambda (prod)
-                         `(when (mole-parse-success-p (setq ,child ,(mole-build-element prod)))
-                            ,child))
-                       productions)
-             'fail))))
+      `(or ,@(mapcar (lambda (prod)
+                       `(mole-parse-match (,(mole-build-element prod) ,child)
+                          ,child nil))
+                     productions)
+           'fail)))
 
   (defun mole-build-lookahead (productions)
     "Return a form for evaluating PRODUCTIONS in `save-excursion'.
 The form evaluates to \"\" if `production-form' evaluates to a
 non-nil value, or nil otherwise."
     `(save-excursion
-       (if (mole-parse-success-p ,(mole-build-sequence productions))
-           ""
-         'fail)))
+       (mole-parse-match (,(mole-build-sequence productions) _)
+         "" 'fail)))
 
   (defun mole-build-negative-lookahead (productions)
     "Return a form for evaluating PRODUCTION-FORM in `save-excursion'.
 The form evaluates to \"\" if `production-form' evaluates to nil,
 or nil otherwise."
     `(save-excursion
-       (if (mole-parse-success-p ,(mole-build-sequence productions))
-           'fail
-         "")))
+       (mole-parse-match (,(mole-build-sequence productions) _)
+         'fail "")))
 
   (defun mole-build-repetition (productions)
     "Return a form for evaluating PRODUCTIONS multiple times.
