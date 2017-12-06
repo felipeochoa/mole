@@ -96,18 +96,29 @@ FAILURES is a list of strings that NAME should not parse."
   ("tatatata" "ta")
   ("" "xx" "at" "t" "a"))
 
-(mole-define-production-test ((zero-or-one (? "t" "a")))
+(mole-define-production-test ((zero-or-one (\? "t" "a")))
+  ("" "ta" ("tatatata" . 3) ("xx" . 1)))
+
+(mole-define-production-test ((zero-or-one-2 (opt "t" "a")))
   ("" "ta" ("tatatata" . 3) ("xx" . 1)))
 
 (mole-define-production-test ((or (or "t" "a")))
   ("t" "a" ("ta" . 2) ("at" . 2) ("tx" . 2) ("ax" . 2))
   ("" "x"))
 
-(mole-define-production-test ((lookahead (?= "te" "st")))
+(mole-define-production-test ((lookahead (= "te" "st")))
   (("test" . 1) ("testtest" . 1))
   ("" "tes" "te"))
 
-(mole-define-production-test ((negative-lookahead (?! "te" "st")))
+(mole-define-production-test ((lookahead-2 (\?= "te" "st")))
+  (("test" . 1) ("testtest" . 1))
+  ("" "tes" "te"))
+
+(mole-define-production-test ((negative-lookahead (! "te" "st")))
+  ("" ("tes" . 1))
+  ("test"))
+
+(mole-define-production-test ((negative-lookahead (\?! "te" "st")))
   ("" ("tes" . 1))
   ("test"))
 
