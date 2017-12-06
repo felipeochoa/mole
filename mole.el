@@ -31,12 +31,27 @@ such chomping will be performed.")
 (defvar mole-default-props '()
   "Plist of `mole-production-keys' to use as defaults values.")
 
+(defvar mole-operator-names '(: or * + \? \?= \?! opt = ! char lexical extern repetition)
+  "List of symbols reserved for mole operators.")
+
 (defvar mole-runtime-force-lexical nil
   "If t, even non-lexical productions will not chomp whitespace.")
 
 (cl-defstruct mole-grammar productions)
 
 (cl-defstruct mole-node name children)
+
+(defmacro mole-node (name children)
+  "Construct a `mole-node' instance named NAME with CHILDREN.
+If NAME indicates that the node should be an operator, a
+`mole-node-operator' is created instead."
+  (declare (debug (symbol form)))
+  (cl-assert (and (consp name) (eq 'quote (car name))
+                  (symbolp (setq name (eval name)))))
+  (cond
+   ((memq name mole-operator-names)
+    `(make-mole-node-operator :name ',name :children ,children))
+   (t `(make-mole-node :name ',name :children ,children))))
 
 (cl-defstruct (mole-node-operator (:include mole-node))
   "Node class for *, +, etc.")
@@ -115,13 +130,13 @@ defaults to simply returning 'fail."
         (list name ()
               (if lexical
                   `(mole-parse-match (,(mole-build-sequence args) ,children)
-                     (make-mole-node :name ',name :children ,children)
+                     (mole-node ',name ,children)
                      'fail)
                 `(mole-maybe-save-excursion
                    (or mole-runtime-force-lexical (funcall whitespace))
                    (mole-parse-match (,(mole-build-sequence args) ,children)
                      (progn (or mole-runtime-force-lexical (funcall whitespace))
-                            (make-mole-node :name ',name :children ,children))
+                            (mole-node ',name ,children))
                      'fail)))))))
 
   (defun mole-build-element (production)
@@ -170,7 +185,7 @@ one for each item in productions."
     "Like `mole-build-sequence', but returning a `mole-node-operator'."
     (let ((res (make-symbol "res")))
       `(mole-parse-match (,(mole-build-sequence productions) ,res)
-         (make-mole-node-operator :name ': :children ,res)
+         (mole-node ': ,res)
          'fail)))
 
   (defun mole-build-zero-or-more (productions)
@@ -181,7 +196,7 @@ one for each item in productions."
       `(let (,item ,star-items)
          (while (mole-parse-success-p (setq ,item ,production-form))
            (setq ,star-items (nconc ,star-items ,item)))
-         (make-mole-node-operator :name '* :children ,star-items))))
+         (mole-node '* ,star-items))))
 
   (defun mole-build-one-or-more (productions)
     "Return a form that evaluates to one or more PRODUCTIONS instances."
@@ -192,16 +207,14 @@ one for each item in productions."
          (while (mole-parse-success-p (setq ,item ,production-form))
            (setq ,star-items (nconc ,star-items ,item)))
          (if ,star-items
-             (make-mole-node-operator :name '+ :children ,star-items)
+             (mole-node '+ ,star-items)
            'fail))))
 
   (defun mole-build-zero-or-one (productions)
     "Return a form that evaluates to zero or one PRODUCTIONS instances."
     (let ((res (make-symbol "res")))
-      `(make-mole-node-operator
-        :name '?
-        :children (mole-parse-match (,(mole-build-sequence productions) ,res)
-                    ,res nil))))
+      `(mole-node '\? (mole-parse-match (,(mole-build-sequence productions) ,res)
+                        ,res nil))))
 
   (defun mole-build-or (productions)
     "Return a form for evaluating a disjunction between productions."
@@ -250,7 +263,7 @@ well."
              (push ,child ,children)
              (cl-incf ,num))
            (if (>= ,num ,min)
-               (make-mole-node-operator :name 'repetition :children (nreverse ,children))
+               (mole-node 'repetition (nreverse ,children))
              'fail)))))
 
   (defun mole-build-lexical (productions)
