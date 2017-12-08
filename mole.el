@@ -40,6 +40,11 @@ string.  Productions using :FUSE cannot call other productions.")
 (defvar mole-runtime-force-lexical nil
   "If t, even non-lexical productions will not chomp whitespace.")
 
+(defvar mole-runtime-highwater-mark 0
+  "Stores the index of the last character contributing to a parse.
+This position may be beyond than the end of the realized node's
+contents e.g., if the character forced backtracking.")
+
 (defvar mole-build-fusing nil
   "Build-time dynamic variable to generate fusing nodes.")
 
@@ -103,6 +108,10 @@ defaults to simply returning 'fail."
          ,on-success
        ,on-fail)))
 
+(defsubst mole-update-highwater-mark (val)
+  "If VAL is greater than `mole-highwater-mark' update that value."
+  (cl-callf max mole-runtime-highwater-mark val))
+
 (defmacro mole-maybe-save-excursion (&rest body)
   "Execute BODY and restore point unless return value is non-nil."
   (declare (debug (&rest form)) (indent defun))
@@ -113,14 +122,32 @@ defaults to simply returning 'fail."
          (goto-char ,point))
        ,res)))
 
+(defmacro mole-with-fresh-highwater-mark (&rest body)
+  "Execute BODY while temporarily resetting `mole-highwater-mark'."
+  (declare (indent defun) (debug (&rest forms)))
+  (let ((old-hwmark (make-symbol "old-hwmark"))
+        (res (make-symbol "res")))
+    `(let ((,old-hwmark mole-runtime-highwater-mark) ,res)
+       (setq mole-runtime-highwater-mark (1- (point)))
+       (setq ,res (progn ,@body))
+       (mole-update-highwater-mark ,old-hwmark)
+       ,res)))
+
+(defmacro mole-ignore-hw-mark (&rest body)
+  "Ignore any update `mole-highwater-mark' in BODY."
+  (declare (indent defun) (debug (&rest forms)))
+  `(let ((mole-runtime-highwater-mark 0))
+     ,@body))
+
 (defun mole-parse-anonymous-literal (string)
   "Return a new anonymous literal if looking at STRING at point."
   `(mole-maybe-save-excursion
-     (let ((i 0) (len ,(length string)))
-       (while (and (< i len) (eq (char-after) (aref ,string i)))
+     (let ((i 0))
+       (while (and (< i ,(length string)) (eq (char-after) (aref ,string i)))
          (forward-char)
          (cl-incf i))
-       (if (= i len) ,string 'fail))))
+       (mole-update-highwater-mark (if (= i ,(length string)) (1- (point)) (point)))
+       (if (= i ,(length string)) ,string 'fail))))
 
 (eval-and-compile
   (defun mole-split-spec-args (spec)
@@ -140,18 +167,21 @@ defaults to simply returning 'fail."
     (cl-destructuring-bind (name props args) spec
       (let ((children (make-symbol "children"))
             (lexical (plist-get props :lexical))
-            (mole-build-fusing (plist-get props :fuse)))
+            (mole-build-fusing (plist-get props :fuse))
+            (parse-whitespace `(or mole-runtime-force-lexical
+                                   (mole-ignore-hw-mark (funcall whitespace)))))
         (list name ()
-              (if lexical
-                  `(mole-parse-match (,(mole-build-sequence args) ,children)
-                     (mole-node ',name ,children ,mole-build-fusing)
-                     'fail)
-                `(mole-maybe-save-excursion
-                   (or mole-runtime-force-lexical (funcall whitespace))
-                   (mole-parse-match (,(mole-build-sequence args) ,children)
-                     (progn (or mole-runtime-force-lexical (funcall whitespace))
-                            (mole-node ',name ,children ,mole-build-fusing))
-                     'fail)))))))
+              `(mole-with-fresh-highwater-mark
+                 ,(if lexical
+                      `(mole-parse-match (,(mole-build-sequence args) ,children)
+                         (mole-node ',name ,children ,mole-build-fusing)
+                         'fail)
+                    `(mole-maybe-save-excursion
+                       ,parse-whitespace
+                       (mole-parse-match (,(mole-build-sequence args) ,children)
+                         (progn ,parse-whitespace
+                                (mole-node ',name ,children ,mole-build-fusing))
+                         'fail))))))))
 
   (defun mole-build-element (production)
     "Compile PRODUCTION into recursive calls."
@@ -283,8 +313,10 @@ a single string literal."
   (defun mole-build-char (sets)
     "Return a form for matching SETS of characters, like using char in `rx'."
     `(if (looking-at (rx (char ,@sets)))
-         (progn (goto-char (match-end 0))
+         (progn (forward-char)
+                (mole-update-highwater-mark (1- (point)))
                 (match-string-no-properties 0))
+       (mole-update-highwater-mark (point))
        'fail))
 
   (cl-defun mole-build-extern ((fn &rest args))
@@ -382,9 +414,10 @@ with two arguments that can be funcalled to parse 'whitespace or
 (defun mole-parse (grammar production)
   "Attempt to parse GRAMMAR's PRODUCTION starting at point."
   (save-excursion
-    (if-let ((parser (assq production (mole-grammar-productions grammar))))
+    (let ((mole-runtime-highwater-mark (point)))
+     (if-let ((parser (assq production (mole-grammar-productions grammar))))
         (funcall (cdr parser))
-      (error "Production %S not defined in grammar" production))))
+      (error "Production %S not defined in grammar" production)))))
 
 (defun mole-parse-string (grammar production string)
   "Attempt to parse GRAMMAR's PRODUCTION in STRING."

@@ -217,5 +217,29 @@ NUM PRODUCTION: appease flycheck."
     (should (equal (mole-node-to-sexp (mole-parse-string g 'd "d")) '(d "d")))
     (should (equal (mole-node-to-sexp (mole-parse-string g 'd " d")) 'fail))))
 
+(defvar mole-test-hwm nil
+  "Used to capture `mole-runtime-highwater-mark' during testing.")
+
+(ert-deftest mole-highwater-mark-literal ()
+  "Test that literals set the highwater mark correctly."
+  (eval
+   `(let* ((whitespace (lambda () nil))
+           (a (lambda ,@(cdr (mole-build-production '(a () ("abc" (char (?d . ?f)))))))))
+      (with-temp-buffer
+        (dolist (fixture '(("abcd" . 4)
+                           ("abce" . 4)
+                           ("abc" . 4)
+                           ("abcx" . 4)
+                           ("abx" . 3)
+                           ("x" . 1)
+                           ("abcfxyz" . 4)))
+          (erase-buffer)
+          (insert (car fixture))
+          (goto-char (point-min))
+          (let (( mole-runtime-highwater-mark 0))
+            (funcall a)
+            (should (= mole-runtime-highwater-mark (cdr fixture)))))))
+   t))
+
 (provide 'mole-tests)
 ;;; mole-test.el ends here
