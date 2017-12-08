@@ -113,12 +113,14 @@ defaults to simply returning 'fail."
          (goto-char ,point))
        ,res)))
 
-(defun mole-parse-anonymous-literal (regexp)
-  "Return a new anonymous literal if looking at REGEXP at point."
-  (if (looking-at regexp)
-      (progn (goto-char (match-end 0))
-             (match-string-no-properties 0))
-    'fail))
+(defun mole-parse-anonymous-literal (string)
+  "Return a new anonymous literal if looking at STRING at point."
+  `(mole-maybe-save-excursion
+     (let ((i 0) (len ,(length string)))
+       (while (and (< i len) (eq (char-after) (aref ,string i)))
+         (forward-char)
+         (cl-incf i))
+       (if (= i len) ,string 'fail))))
 
 (eval-and-compile
   (defun mole-split-spec-args (spec)
@@ -155,7 +157,7 @@ defaults to simply returning 'fail."
     "Compile PRODUCTION into recursive calls."
     (cond
      ((symbolp production) `(funcall ,production))
-     ((stringp production) `(mole-parse-anonymous-literal ,(regexp-quote production)))
+     ((stringp production) (mole-parse-anonymous-literal production))
      ((consp production)
       (pcase (car production)
         (': (mole-build-sequence-operator (cdr production)))
@@ -280,7 +282,10 @@ a single string literal."
 
   (defun mole-build-char (sets)
     "Return a form for matching SETS of characters, like using char in `rx'."
-    `(mole-parse-anonymous-literal (rx (char ,@sets))))
+    `(if (looking-at (rx (char ,@sets)))
+         (progn (goto-char (match-end 0))
+                (match-string-no-properties 0))
+       'fail))
 
   (cl-defun mole-build-extern ((fn &rest args))
     "Build a custom matcher calling FN with ARGS."
