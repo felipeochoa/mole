@@ -241,27 +241,19 @@ a single string literal."
            'fail)))
 
   (defun mole-build-lookahead (productions)
-    "Return a form for evaluating PRODUCTIONS in `save-excursion'.
-The form evaluates to \"\" if `production-form' evaluates to a
-non-nil value, or nil otherwise."
+    "Return a form for evaluating PRODUCTIONS in `save-excursion'."
     `(save-excursion
        (mole-parse-match (,(mole-build-sequence productions) _)
          "" 'fail)))
 
   (defun mole-build-negative-lookahead (productions)
-    "Return a form for evaluating PRODUCTION-FORM in `save-excursion'.
-The form evaluates to \"\" if `production-form' evaluates to nil,
-or nil otherwise."
+    "Return a form for evaluating (not PRODUCTION-FORM) in `save-excursion'."
     `(save-excursion
        (mole-parse-match (,(mole-build-sequence productions) _)
          'fail "")))
 
   (defun mole-build-repetition (productions)
-    "Return a form for evaluating PRODUCTIONS multiple times.
-The first value is the minimum number of repetitions. If the
-second value is a number, it specifies a maximum number of
-repetitions; otherwise the first value is taken as the max as
-well."
+    "Return a form for evaluating PRODUCTIONS multiple times."
     (let ((min (car productions))
           (max (cadr productions))
           (productions (cddr productions))
@@ -291,14 +283,66 @@ well."
     `(mole-parse-anonymous-literal (rx (char ,@sets))))
 
   (cl-defun mole-build-extern ((fn &rest args))
-    "Build a custom matcher calling FN with ARGS.
-ARGS is evaluated in the scope of the grammar builder, so it has
-access to the productions, which are funcallable by their name."
+    "Build a custom matcher calling FN with ARGS."
     `(apply ,fn (list ,@args)))
   )
 
 (defmacro mole-create-grammar (&rest productions)
-  "Create a new grammar object with PRODUCTIONS."
+  "Create a new grammar object with PRODUCTIONS.
+
+PRODUCTIONS is a list of (NAME &rest ARGS), where NAME is a
+symbol and ARGS is a list with any of the following elements:
+
+a symbol -- Must be the name of a production node which is
+matched.
+
+a string -- Will be matched literally
+
+\(char &rest char-spec\) -- Will match a regexp using the `rx'
+char production.  (This only allows character classes, ranges and
+literals).
+
+\(: &rest prods\) -- Sequence operator.  Match PRODS in order and
+succeed if they all succeed; otherwise fail.
+
+\(or &rest prods\) -- Ordered choice operator.  Each production in
+PRODS is tried in order until one of them succeeds.
+
+\(* &rest prods\) -- Match PRODS sequentially zero or more times.
+This production never fails.
+
+\(+ &rest prods\) -- Match PRODS sequentially one or more times.
+
+\(opt &rest prod\)
+\(\? &rest prods\) -- Match PRODS sequentially zero or one time.
+This production never fails.  (Note that the question mark must
+be escaped for the Lisp reader).
+
+\(= &rest prods\)
+\(\?= &rest prods\) -- If PRODS match sequentially, this
+production succeeds without advancing point and without
+generating any output.  (Note that the question mark must be
+escaped for the Lisp reader).
+
+\(! &rest prods\)
+\(\?! &rest prods\) -- If PRODS do not match sequentially, this
+production succeeds without advancing point and without
+generating any output.  (Note that the question mark must be
+escaped for the Lisp reader).
+
+\(NUMBER &rest prods\)
+\(NUMBER NUMBER &rest prods\) -- Both forms repeatedly match
+PRODS.  The first value is the minimum number of repetitions that
+must match to succeed.  If the second value is a number, the form
+will greedily try to parse beyond the minimal match until PRODS
+stop matching or it reaches the maximum number of repetitions.
+
+\(extern fn &rest args\) -- Calls FN with ARGS to retrieve a
+parse result.  ARGS is evaluated at grammar build time and can
+refer to other productions by their names.  E.g.,
+\(extern 'my-parse-func whitespace number) will call 'my-parse-func
+with two arguments that can be funcalled to parse 'whitespace or
+'number."
   (cl-callf mole-munge-productions productions)
   (let ((whitespace (assq 'whitespace productions)))
     (if whitespace
