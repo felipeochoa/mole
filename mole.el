@@ -134,7 +134,7 @@ defaults to simply returning 'fail."
        ,res)))
 
 (defmacro mole-ignore-hw-mark (&rest body)
-  "Ignore any update `mole-highwater-mark' in BODY."
+  "Ignore any update to `mole-highwater-mark' in BODY."
   (declare (indent defun) (debug (&rest forms)))
   `(let ((mole-runtime-highwater-mark 0))
      ,@body))
