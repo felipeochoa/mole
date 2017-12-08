@@ -188,13 +188,19 @@ to check.  RES is the result to store, which is returned."
 POS is the buffer location where parsing is happening.  PROD-NUM
 is the numerical index of the production to check.  REMOVE, if
 non-nil indicates that the entry should be removed from the
-cache."
+cache.
+
+If the parse result is not found, return nil.  If the parse
+result is found, the return value is a cons cell (res . hw-mark),
+where RES is the parse result and HW-MARK is the highwater-mark
+reach while parsing RES (in current buffer coordinates)."
   (when-let (old-pos (mole-cache-new-to-old cache pos))
     ;; OLD-POS could be nil if pos is in the dirty region
     (when-let (pos-results (gethash old-pos (mole-cache-table cache)))
       (when-let (res (aref pos-results prod-num))
         (if (mole-cache-result-valid-p res cache)
-            (setq res (mole-cache-result-result res))
+            (setq res (cons (mole-cache-result-result res)
+                            (mole-cache-old-to-new* cache (mole-cache-result-end res))))
           (setq remove t)
           (setq res nil))
         (when remove

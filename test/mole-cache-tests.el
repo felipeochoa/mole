@@ -60,32 +60,32 @@ ENTRIES is a list of (pos end prod result) lists."
   (let ((cache (make-mole-cache :num-prods 3)))
     (should (null (mole-cache-get cache 5 1)))
     (should (eq 'result-1 (mole-cache-set cache 5 5 1 'result-1)))
-    (should (eq 'result-1 (mole-cache-get cache 5 1)))
-    (should (eq 'result-1 (mole-cache-get cache 5 1))) ; ensure don't remove
+    (should (equal '(result-1 . 5) (mole-cache-get cache 5 1)))
+    (should (equal '(result-1 . 5) (mole-cache-get cache 5 1))) ; ensure don't remove
 
     (should (null (mole-cache-get cache 5 2)))
     (should (null (mole-cache-get cache 2 1)))
     (should (null (mole-cache-get cache 8 1)))
 
-    (should (eq 'result-2 (mole-cache-set cache 5 5 2 'result-2)))
-    (should (eq 'result-2 (mole-cache-get cache 5 2)))
-    (should (eq 'result-1 (mole-cache-get cache 5 1))) ; don't clobber
+    (should (eq 'result-2 (mole-cache-set cache 5 7 2 'result-2)))
+    (should (equal '(result-2 . 7) (mole-cache-get cache 5 2)))
+    (should (equal '(result-1 . 5) (mole-cache-get cache 5 1))) ; don't clobber
 
-    (should (eq 'result-3 (mole-cache-set cache 8 8 1 'result-3)))
-    (should (eq 'result-3 (mole-cache-get cache 8 1)))
-    (should (eq 'result-2 (mole-cache-get cache 5 2))) ; don't clobber
-    (should (eq 'result-1 (mole-cache-get cache 5 1)))))
+    (should (eq 'result-3 (mole-cache-set cache 8 11 1 'result-3)))
+    (should (equal '(result-3 . 11) (mole-cache-get cache 8 1)))
+    (should (equal '(result-2 . 7) (mole-cache-get cache 5 2))) ; don't clobber
+    (should (equal '(result-1 . 5) (mole-cache-get cache 5 1)))))
 
 (ert-deftest mole-cache-get-remove ()
   "Ensure the entry is removed when REMOVE is t."
   (let ((cache (mole-cache-test-cache '((5 8 1 result-1)
                                         (5 8 2 result-2)
                                         (8 10 1 result-3)))))
-    (should (eq 'result-1 (mole-cache-get cache 5 1 t)))
+    (should (equal '(result-1 . 8) (mole-cache-get cache 5 1 t)))
     (should (null (mole-cache-get cache 5 1)))
     ;; ensure other entries are unaffected
-    (should (eq 'result-3 (mole-cache-get cache 8 1)))
-    (should (eq 'result-2 (mole-cache-get cache 5 2)))))
+    (should (equal '(result-3 . 10) (mole-cache-get cache 8 1)))
+    (should (equal '(result-2 . 8) (mole-cache-get cache 5 2)))))
 
 (ert-deftest mole-cache-set-entry-cache ()
   "Ensure the number of entries caches are set correctly."
@@ -113,15 +113,15 @@ ENTRIES is a list of (pos end prod result) lists."
     (should (= 3 (mole-cache-num-entries cache)))
     (should (equal (mole-cache-entry-counts cache) '((5 . 2) (8 . 1))))
 
-    (should (eq 'result-1 (mole-cache-get cache 5 1 t)))
+    (should (equal '(result-1 . 8) (mole-cache-get cache 5 1 t)))
     (should (= 2 (mole-cache-num-entries cache)))
     (should (equal (mole-cache-entry-counts cache) '((5 . 1) (8 . 1))))
 
-    (should (eq 'result-3 (mole-cache-get cache 8 1 t)))
+    (should (equal '(result-3 . 8) (mole-cache-get cache 8 1 t)))
     (should (= 1 (mole-cache-num-entries cache)))
     (should (equal (mole-cache-entry-counts cache) '((5 . 1))))
 
-    (should (eq 'result-2 (mole-cache-get cache 5 2 t)))
+    (should (equal '(result-2 . 8) (mole-cache-get cache 5 2 t)))
     (should (= 0 (mole-cache-num-entries cache)))
     (should (equal (mole-cache-entry-counts cache) '()))))
 
@@ -139,8 +139,8 @@ the dirty region."
     (setf (mole-cache-dirty-start cache) 3
           (mole-cache-dirty-end cache) 6
           (mole-cache-dirty-delta cache) 2)
-    (should (eq 'result1 (mole-cache-get cache 1 1)))
-    (should (eq 'result2 (mole-cache-get cache 1 0)))
+    (should (equal '(result1 . 2) (mole-cache-get cache 1 1)))
+    (should (equal '(result2 . 3) (mole-cache-get cache 1 0)))
     (should-not (mole-cache-get cache 1 2)) ; result3
     (should-not (mole-cache-get cache 2 2)) ; result4
     (should-not (mole-cache-get cache 3 2)) ; result3
@@ -148,8 +148,8 @@ the dirty region."
     (should-not (mole-cache-get cache 5 2)) ; result5
     (should-not (mole-cache-get cache 6 2)) ; for good measure
     (should-not (mole-cache-get cache 7 2)) ; result5
-    (should (eq 'result6 (mole-cache-get cache 8 2)))
-    (should (eq 'result7 (mole-cache-get cache 9 0)))))
+    (should (equal '(result6 . 11) (mole-cache-get cache 8 2)))
+    (should (equal '(result7 . 11) (mole-cache-get cache 9 0)))))
 
 (ert-deftest mole-cache-get-with-dirty-shrank ()
   "Ensure get operations translate positions when buffer is dirty
@@ -165,14 +165,14 @@ overlaps the dirty region."
     (setf (mole-cache-dirty-start cache) 3
           (mole-cache-dirty-end cache) 6
           (mole-cache-dirty-delta cache) -2)
-    (should (eq 'result1 (mole-cache-get cache 1 1)))
-    (should (eq 'result2 (mole-cache-get cache 1 0)))
+    (should (equal '(result1 . 3) (mole-cache-get cache 1 1)))
+    (should (equal '(result2 . 2) (mole-cache-get cache 1 0)))
     (should-not (mole-cache-get cache 2 2)) ; result3
     (should-not (mole-cache-get cache 2 0)) ; result4/result5
     (should-not (mole-cache-get cache 3 0)) ; result5
     (should-not (mole-cache-get cache 4 0)) ; result5
-    (should (eq 'result6 (mole-cache-get cache 4 1)))
-    (should (eq 'result7 (mole-cache-get cache 8 1)))))
+    (should (equal '(result6 . 8) (mole-cache-get cache 4 1)))
+    (should (equal '(result7 . 10) (mole-cache-get cache 8 1)))))
 
 (ert-deftest mole-cache-update-dirty-region ()
   (let ((cache (make-mole-cache :num-prods 3)))
