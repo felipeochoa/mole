@@ -57,9 +57,9 @@ contents e.g., if the character forced backtracking.")
 If FUSE is t, returns a string literal instead.  If NAME
 indicates that the node should be an operator, a
 `mole-node-operator' is created instead."
-  (declare (debug (symbol form)))
+  (declare (debug (symbolp form &optional form)))
   (cl-assert (and (consp name) (eq 'quote (car name))
-                  (symbolp (setq name (eval name)))))
+                  (symbolp (setq name (cadr name)))))
   (setq fuse (eval fuse))
   (cond
    ((memq name mole-operator-names)
@@ -102,7 +102,7 @@ indicates that the node should be an operator, a
 RES-SYM is bound to the result of FORM.  If FORM is a successful
 parse, execute ON-SUCCESS.  Otherwise execute ON-FAIL. ON-FAIL
 defaults to simply returning 'fail."
-  (declare (debug ((form symbol) form form)) (indent 1))
+  (declare (debug ((form symbolp) form &optional form)) (indent 1))
   `(let ((,res-sym ,form))
      (if (mole-parse-success-p ,res-sym)
          ,on-success
@@ -124,7 +124,7 @@ defaults to simply returning 'fail."
 
 (defmacro mole-with-fresh-highwater-mark (&rest body)
   "Execute BODY while temporarily resetting `mole-highwater-mark'."
-  (declare (indent defun) (debug (&rest forms)))
+  (declare (indent defun) (debug (&rest form)))
   (let ((old-hwmark (make-symbol "old-hwmark"))
         (res (make-symbol "res")))
     `(let ((,old-hwmark mole-runtime-highwater-mark) ,res)
@@ -135,7 +135,7 @@ defaults to simply returning 'fail."
 
 (defmacro mole-ignore-hw-mark (&rest body)
   "Ignore any update to `mole-highwater-mark' in BODY."
-  (declare (indent defun) (debug (&rest forms)))
+  (declare (indent defun) (debug (&rest form)))
   `(let ((mole-runtime-highwater-mark 0))
      ,@body))
 
