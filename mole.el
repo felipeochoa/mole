@@ -19,7 +19,7 @@
 (require 'subr-x)
 
 (defvar mole-default-whitespace-terminal
-  '(whitespace (:lexical t) (* (char " \t\n\f")))
+  '(whitespace (:lexical t) ((* (char " \t\n\f"))))
   "If a grammar doesn't specify whitespace, this value will be used.")
 
 (defvar mole-production-keys '(:lexical)

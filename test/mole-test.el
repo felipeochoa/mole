@@ -44,7 +44,7 @@ FAILURES is a list of strings that NAME should not parse."
       (push (apply 'append
                    (list (car mole-default-whitespace-terminal))
                    (cadr mole-default-whitespace-terminal)
-                   (cddr mole-default-whitespace-terminal) nil)
+                   (cddr mole-default-whitespace-terminal))
             productions))
     (cl-callf mole-munge-productions productions)
     `(ert-deftest ,fullname ()
