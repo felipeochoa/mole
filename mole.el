@@ -19,14 +19,17 @@
 (require 'subr-x)
 
 (defvar mole-default-whitespace-terminal
-  '(whitespace (:lexical t) ((* (char " \t\n\f"))))
+  '(whitespace (:lexical t :fuse t) ((* (char " \t\n\f"))))
   "If a grammar doesn't specify whitespace, this value will be used.")
 
-(defvar mole-production-keys '(:lexical)
+(defvar mole-production-keys '(:lexical :fuse)
   "List of keys that may be given in a production definition.
 :LEXICAL if nil, has productions chomp whitespace and comments
 before attempting a match and after a successful match.  If t, no
-such chomping will be performed.")
+such chomping will be performed.
+
+:FUSE If non-nil all children will be merged into a single
+string.  Productions using :FUSE cannot call other productions.")
 
 (defvar mole-default-props '()
   "Plist of `mole-production-keys' to use as defaults values.")
@@ -37,20 +40,28 @@ such chomping will be performed.")
 (defvar mole-runtime-force-lexical nil
   "If t, even non-lexical productions will not chomp whitespace.")
 
+(defvar mole-build-fusing nil
+  "Build-time dynamic variable to generate fusing nodes.")
+
 (cl-defstruct mole-grammar productions)
 
 (cl-defstruct mole-node name children)
 
-(defmacro mole-node (name children)
+(defmacro mole-node (name children &optional fuse)
   "Construct a `mole-node' instance named NAME with CHILDREN.
-If NAME indicates that the node should be an operator, a
+If FUSE is t, returns a string literal instead.  If NAME
+indicates that the node should be an operator, a
 `mole-node-operator' is created instead."
   (declare (debug (symbol form)))
   (cl-assert (and (consp name) (eq 'quote (car name))
                   (symbolp (setq name (eval name)))))
+  (setq fuse (eval fuse))
   (cond
    ((memq name mole-operator-names)
-    `(make-mole-node-operator :name ',name :children ,children))
+    (if fuse
+        `(apply #'concat ,children)
+      `(make-mole-node-operator :name ',name :children ,children)))
+   (fuse `(make-mole-node :name ',name :children (list (apply #'concat ,children))))
    (t `(make-mole-node :name ',name :children ,children))))
 
 (cl-defstruct (mole-node-operator (:include mole-node))
@@ -126,17 +137,18 @@ defaults to simply returning 'fail."
     "Return a (name args body) list for SPEC."
     (cl-destructuring-bind (name props args) spec
       (let ((children (make-symbol "children"))
-            (lexical (plist-get props :lexical)))
+            (lexical (plist-get props :lexical))
+            (mole-build-fusing (plist-get props :fuse)))
         (list name ()
               (if lexical
                   `(mole-parse-match (,(mole-build-sequence args) ,children)
-                     (mole-node ',name ,children)
+                     (mole-node ',name ,children ,mole-build-fusing)
                      'fail)
                 `(mole-maybe-save-excursion
                    (or mole-runtime-force-lexical (funcall whitespace))
                    (mole-parse-match (,(mole-build-sequence args) ,children)
                      (progn (or mole-runtime-force-lexical (funcall whitespace))
-                            (mole-node ',name ,children))
+                            (mole-node ',name ,children ,mole-build-fusing))
                      'fail)))))))
 
   (defun mole-build-element (production)
@@ -163,7 +175,9 @@ defaults to simply returning 'fail."
   (defun mole-build-sequence (productions)
     "Compile PRODUCTIONS into sequenced calls to each.
 The resulting form will be a list of `mole-node's and literals;
-one for each item in productions."
+one for each item in productions.  If `mole-build-fusing' is
+non-nil, all the descendant nodes are concatenated together into
+a single string literal."
     (let ((res (make-symbol "res")))
       (if (null (cdr productions))
           ;; special-case single item sequences
@@ -185,7 +199,7 @@ one for each item in productions."
     "Like `mole-build-sequence', but returning a `mole-node-operator'."
     (let ((res (make-symbol "res")))
       `(mole-parse-match (,(mole-build-sequence productions) ,res)
-         (mole-node ': ,res)
+         (mole-node ': ,res ,mole-build-fusing)
          'fail)))
 
   (defun mole-build-zero-or-more (productions)
@@ -196,7 +210,7 @@ one for each item in productions."
       `(let (,item ,star-items)
          (while (mole-parse-success-p (setq ,item ,production-form))
            (setq ,star-items (nconc ,star-items ,item)))
-         (mole-node '* ,star-items))))
+         (mole-node '* ,star-items ,mole-build-fusing))))
 
   (defun mole-build-one-or-more (productions)
     "Return a form that evaluates to one or more PRODUCTIONS instances."
@@ -207,14 +221,15 @@ one for each item in productions."
          (while (mole-parse-success-p (setq ,item ,production-form))
            (setq ,star-items (nconc ,star-items ,item)))
          (if ,star-items
-             (mole-node '+ ,star-items)
+             (mole-node '+ ,star-items ,mole-build-fusing)
            'fail))))
 
   (defun mole-build-zero-or-one (productions)
     "Return a form that evaluates to zero or one PRODUCTIONS instances."
     (let ((res (make-symbol "res")))
       `(mole-node '\? (mole-parse-match (,(mole-build-sequence productions) ,res)
-                        ,res nil))))
+                        ,res nil)
+                  ,mole-build-fusing)))
 
   (defun mole-build-or (productions)
     "Return a form for evaluating a disjunction between productions."
@@ -260,10 +275,10 @@ well."
          (let ((,num 0) ,child ,children)
            (while (and (< ,num ,max)
                        (mole-parse-success-p (setq ,child ,(mole-build-sequence productions))))
-             (push ,child ,children)
+             (cl-callf nconc ,children ,child)
              (cl-incf ,num))
            (if (>= ,num ,min)
-               (mole-node 'repetition (nreverse ,children))
+               (mole-node 'repetition ,children ,mole-build-fusing)
              'fail)))))
 
   (defun mole-build-lexical (productions)

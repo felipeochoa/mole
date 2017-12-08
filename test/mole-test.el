@@ -158,6 +158,16 @@ NUM PRODUCTION: appease flycheck."
                               (non-lexical "a"))
   ("aa| a a") ("a a| a a"))
 
+(ert-deftest mole-fuse-production ()
+  "Ensure fusing productions join their children."
+  (let* ((g (eval `(mole-create-grammar
+                    (a :lexical t :fuse t "b" (* "c") (+ "d") (opt "e") (3 "f")))
+                  t))
+         res)
+    (setq res (mole-parse-string g 'a "bccdfff"))
+    (should (mole-parse-success-p res))
+    (should (equal (mole-node-to-sexp res) '(a "bccdfff")))))
+
 (ert-deftest mole-split-spec-args ()
   "Ensure `mole-split-spec-args' works correctly."
   (dolist (fixture '((("a" "b" "c") () ("a" "b" "c"))
@@ -179,13 +189,13 @@ NUM PRODUCTION: appease flycheck."
                    (whitespace :lexical t (* (char " \t\n\f")))
                    (expression product (* (or "+" "-") product))
                    (product number (* (or "*" "/") number))
-                   (number (+ (char "0-9"))))
+                   (number :fuse t (+ (char "0-9"))))
                  t)))
     (should (equal (mole-node-to-sexp (mole-parse-string g 'expression "3 \t+ 22 * 6"))
                    '(expression
                      (product (number "3"))
                      "+"
-                     (product (number "2" "2") "*" (number "6")))))))
+                     (product (number "22") "*" (number "6")))))))
 
 (ert-deftest mole-grammar-varying-defaults ()
   "Test a grammar with various defaults plists"
