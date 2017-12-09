@@ -29,7 +29,7 @@ before attempting a match and after a successful match.  If t, no
 such chomping will be performed.
 
 :FUSE If non-nil all children will be merged into a single
-string.  Productions using :FUSE cannot call other productions.")
+node.  Productions using :FUSE cannot call other productions.")
 
 (defvar mole-default-props '()
   "Plist of `mole-production-keys' to use as defaults values.")
@@ -48,29 +48,48 @@ contents e.g., if the character forced backtracking.")
 (defvar mole-build-fusing nil
   "Build-time dynamic variable to generate fusing nodes.")
 
+(defvar mole-runtime-string-parse nil
+  "String passed to `mole-parse-string'; used to convert to sexps later.")
+
 (cl-defstruct mole-grammar productions)
 
-(cl-defstruct mole-node name children)
+(cl-defstruct mole-node name children pos end)
 
-(defmacro mole-node (name children &optional fuse)
+(cl-defstruct (mole-node-operator (:include mole-node))
+  "Node class for *, +, etc.")
+
+(cl-defstruct (mole-node-literal (:include mole-node))
+  "Node class for anonymous literals.") ;; just ignore name and children
+
+(defmacro mole-node (name children fuse &optional pos end)
   "Construct a `mole-node' instance named NAME with CHILDREN.
-If FUSE is t, returns a string literal instead.  If NAME
-indicates that the node should be an operator, a
+If FUSE is t (evaluated at compile-time) and NAME indicates an
+operator, ignore NAME and CHILDREN and return a single literal
+instead.  If NAME instead indicates a custom production, its
+children are instead merged into one anonymous literal.
+
+POS and END refer to the buffer locations where the node match
+started and ended.  If not given, POS defaults to the POS of the
+first child and END defaults to the END of the last child.
+
+If NAME indicates that the node should be an operator, a
 `mole-node-operator' is created instead."
   (declare (debug (symbolp form &optional form)))
   (cl-assert (and (consp name) (eq 'quote (car name))
                   (symbolp (setq name (cadr name)))))
   (setq fuse (eval fuse))
-  (cond
-   ((memq name mole-operator-names)
-    (if fuse
-        `(apply #'concat ,children)
-      `(make-mole-node-operator :name ',name :children ,children)))
-   (fuse `(make-mole-node :name ',name :children (list (apply #'concat ,children))))
-   (t `(make-mole-node :name ',name :children ,children))))
-
-(cl-defstruct (mole-node-operator (:include mole-node))
-  "Node class for *, +, etc.")
+  (let ((kids (make-symbol "kids")))
+    (unless pos (setq pos `(if ,kids (mole-node-pos (car ,kids)) (point))))
+    (unless end (setq end `(if ,kids (mole-node-end (car (last ,kids))) (point))))
+   `(let ((,kids ,children))
+      ,(cond
+        ((and (memq name mole-operator-names) fuse)
+         `(make-mole-node-literal :pos ,pos :end ,end))
+        ((memq name mole-operator-names)
+         `(make-mole-node-operator :name ',name :children ,kids :pos ,pos :end ,end))
+        (fuse `(make-mole-node :name ',name :pos ,pos :end ,end
+                               :children (list (make-mole-node-literal :pos ,pos :end ,end))))
+        (t `(make-mole-node :name ',name :children ,kids :pos ,pos :end ,end))))))
 
 (cl-defmethod mole-node-to-sexp ((node mole-node))
   "Convert NODE into a test-friendly sexp."
@@ -81,9 +100,13 @@ indicates that the node should be an operator, a
                        (list (mole-node-to-sexp child))))
                    (mole-node-children node))))
 
-(cl-defmethod mole-node-to-sexp ((literal string))
+(cl-defmethod mole-node-to-sexp ((literal mole-node-literal))
   "Convert LITERAL into a test-friendly sexp."
-  literal)
+  (let ((beg (mole-node-literal-pos literal))
+        (end (mole-node-literal-end literal)))
+    (if mole-runtime-string-parse
+        (substring mole-runtime-string-parse (1- beg) (1- end)) ; strings are 0-based
+      (buffer-substring-no-properties beg end))))
 
 (cl-defmethod mole-node-to-sexp ((_ (eql fail)))
   "Return 'fail if the parse failed."
@@ -142,16 +165,17 @@ defaults to simply returning 'fail."
 (defmacro mole-parse-anonymous-literal (string)
   "Return a new anonymous literal if looking at STRING at point."
   (declare (indent defun) (debug (stringp)))
-  `(mole-maybe-save-excursion
-     (let ((i 0))
-       (while (and (< i ,(length string)) (eq (char-after) (aref ,string i)))
-         (forward-char)
-         (cl-incf i))
-       (if (= i ,(length string))
-           (progn (mole-update-highwater-mark (1- (point)))
-                  ,string)
-         (mole-update-highwater-mark (point))
-         'fail))))
+  (let ((i (make-symbol "i")) (pos (make-symbol "pos")))
+    `(mole-maybe-save-excursion
+       (let ((,i 0) (,pos (point)))
+         (while (and (< ,i ,(length string)) (eq (char-after) (aref ,string ,i)))
+           (forward-char)
+           (cl-incf ,i))
+         (if (= ,i ,(length string))
+             (progn (mole-update-highwater-mark (1- (point)))
+                    (make-mole-node-literal :pos ,pos :end (point)))
+           (mole-update-highwater-mark (point))
+           'fail)))))
 
 (eval-and-compile
   (defun mole-split-spec-args (spec)
@@ -278,15 +302,13 @@ a single string literal."
 
   (defun mole-build-lookahead (productions)
     "Return a form for evaluating PRODUCTIONS in `save-excursion'."
-    `(save-excursion
-       (mole-parse-match (,(mole-build-sequence productions) _)
-         "" 'fail)))
+    `(mole-parse-match ((save-excursion ,(mole-build-sequence productions)) _)
+       (make-mole-node-literal :pos (point) :end (point)) 'fail))
 
   (defun mole-build-negative-lookahead (productions)
     "Return a form for evaluating (not PRODUCTION-FORM) in `save-excursion'."
-    `(save-excursion
-       (mole-parse-match (,(mole-build-sequence productions) _)
-         'fail "")))
+    `(mole-parse-match ((save-excursion ,(mole-build-sequence productions)) _)
+       'fail (make-mole-node-literal :pos (point) :end (point))))
 
   (defun mole-build-repetition (productions)
     "Return a form for evaluating PRODUCTIONS multiple times."
@@ -321,7 +343,7 @@ a single string literal."
     `(if (looking-at (rx (char ,@sets)))
          (progn (forward-char)
                 (mole-update-highwater-mark (1- (point)))
-                (match-string-no-properties 0))
+                (make-mole-node-literal :pos (1- (point)) :end (point)))
        (mole-update-highwater-mark (point))
        'fail))
 
@@ -419,6 +441,7 @@ with two arguments that can be funcalled to parse 'whitespace or
 
 (defun mole-parse (grammar production)
   "Attempt to parse GRAMMAR's PRODUCTION starting at point."
+  (setq mole-runtime-string-parse nil)
   (save-excursion
     (let ((mole-runtime-highwater-mark (point)))
      (if-let ((parser (assq production (mole-grammar-productions grammar))))
@@ -430,7 +453,8 @@ with two arguments that can be funcalled to parse 'whitespace or
   (with-temp-buffer
     (insert string)
     (goto-char (point-min))
-    (mole-parse grammar production)))
+    (prog1 (mole-parse grammar production)
+      (setq mole-runtime-string-parse string))))
 
 (provide 'mole)
 
