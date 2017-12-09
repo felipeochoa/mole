@@ -307,8 +307,10 @@ a single string literal."
 
   (defun mole-build-lexical (productions)
     "Return a form for evaluation PRODUCTIONS, but in a lexical environment."
-    `(let ((mole-runtime-force-lexical t))
-       ,(mole-build-sequence productions)))
+    (let ((res (make-symbol "res")))
+      `(let ((mole-runtime-force-lexical t))
+         (mole-parse-match (,(mole-build-sequence productions) ,res)
+           (mole-node 'lexical ,res ,mole-build-fusing)))))
 
   (defun mole-build-char (sets)
     "Return a form for matching SETS of characters, like using char in `rx'."
