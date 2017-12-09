@@ -236,10 +236,29 @@ NUM PRODUCTION: appease flycheck."
           (erase-buffer)
           (insert (car fixture))
           (goto-char (point-min))
-          (let (( mole-runtime-highwater-mark 0))
+          (let ((mole-runtime-highwater-mark 0))
             (funcall a)
             (should (= mole-runtime-highwater-mark (cdr fixture)))))))
    t))
+
+(ert-deftest mole-choice-highwatermark-choice ()
+  "Ensure the highwater marks are set correctly in choice parsing."
+  (eval
+   `(let* ((whitespace (lambda () nil))
+           (a (lambda ,@(cdr (mole-build-production '(a () ("x" "x" (+ "b") "a" "a"))))))
+           (b (lambda ,@(cdr (mole-build-production '(b () ("xxb"))))))
+           (choice (lambda ,@(cdr (mole-build-production '(choice () ((or a b))))))))
+      (with-temp-buffer
+        (insert "xxbba")
+        (let ((mole-runtime-highwater-mark 0))
+          (goto-char (point-min))
+          (funcall choice)
+          (should (= 6 mole-runtime-highwater-mark)))
+        (let ((mole-runtime-highwater-mark 0))
+          (goto-char (point-min))
+          (funcall b)
+          (should (= 3 mole-runtime-highwater-mark)))))))
+
 
 (provide 'mole-tests)
 ;;; mole-test.el ends here
