@@ -85,7 +85,7 @@ first child and END defaults to the END of the last child.
 
 If NAME indicates that the node should be an operator, a
 `mole-node-operator' is created instead."
-  (declare (debug (symbolp form &optional form)))
+  (declare (debug (("quote" symbolp) form &optional form)))
   (cl-assert (and (consp name) (eq 'quote (car name))
                   (symbolp (setq name (cadr name)))))
   (setq fuse (eval fuse))
