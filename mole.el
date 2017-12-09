@@ -22,14 +22,19 @@
   '(whitespace (:lexical t :fuse t) ((* (char " \t\n\f"))))
   "If a grammar doesn't specify whitespace, this value will be used.")
 
-(defvar mole-production-keys '(:lexical :fuse)
+(defvar mole-production-keys '(:lexical :fuse :params)
   "List of keys that may be given in a production definition.
 :LEXICAL if nil, has productions chomp whitespace and comments
 before attempting a match and after a successful match.  If t, no
 such chomping will be performed.
 
-:FUSE If non-nil all children will be merged into a single
-node.  Productions using :FUSE cannot call other productions.")
+:FUSE if non-nil all children will be merged into a single
+node.  Productions using :FUSE cannot call other productions.
+
+:PARAMS if non-nil should be an arglist suitable for a lambda
+form.  Applications of this production must specify productions
+to bind to this arglist, which can be referenced inside the rule
+body.")
 
 (defvar mole-default-props '()
   "Plist of `mole-production-keys' to use as defaults values.")
@@ -227,7 +232,7 @@ defaults to simply returning 'fail."
             (mole-build-fusing (plist-get props :fuse))
             (parse-whitespace `(or mole-runtime-force-lexical
                                    (mole-ignore-hw-mark (funcall whitespace)))))
-        (list name ()
+        (list name (plist-get props :params)
               `(mole-cached-result ,(gethash name mole-build-prod-nums)
                  ,(if lexical
                       `(mole-parse-match (,(mole-build-sequence args) ,children)
@@ -258,6 +263,7 @@ defaults to simply returning 'fail."
         ('lexical (mole-build-lexical (cdr production)))
         ('extern (mole-build-extern (cdr production)))
         ((pred numberp) (mole-build-repetition production))
+        ((pred symbolp) (mole-build-parametric-call production))
         (_ (error "Unknown production %S" production))))
      (t (error "Unknown production %S" production))))
 
@@ -379,6 +385,11 @@ a single string literal."
   (cl-defun mole-build-extern ((fn &rest args))
     "Build a custom matcher calling FN with ARGS."
     `(apply ,fn (list ,@args)))
+
+  (cl-defun mole-build-parametric-call ((prod &rest productions))
+    "Build a parametric application of PROD with PRODUCTIONS as arguments."
+    `(funcall ,prod ,@(mapcar (lambda (p) `(lambda () ,(mole-build-element p)))
+                              productions)))
   )
 
 (defmacro mole-create-grammar (&rest productions)
