@@ -139,15 +139,19 @@ defaults to simply returning 'fail."
   `(let ((mole-runtime-highwater-mark 0))
      ,@body))
 
-(defun mole-parse-anonymous-literal (string)
+(defmacro mole-parse-anonymous-literal (string)
   "Return a new anonymous literal if looking at STRING at point."
+  (declare (indent defun) (debug (stringp)))
   `(mole-maybe-save-excursion
      (let ((i 0))
        (while (and (< i ,(length string)) (eq (char-after) (aref ,string i)))
          (forward-char)
          (cl-incf i))
-       (mole-update-highwater-mark (if (= i ,(length string)) (1- (point)) (point)))
-       (if (= i ,(length string)) ,string 'fail))))
+       (if (= i ,(length string))
+           (progn (mole-update-highwater-mark (1- (point)))
+                  ,string)
+         (mole-update-highwater-mark (point))
+         'fail))))
 
 (eval-and-compile
   (defun mole-split-spec-args (spec)
@@ -187,7 +191,7 @@ defaults to simply returning 'fail."
     "Compile PRODUCTION into recursive calls."
     (cond
      ((symbolp production) `(funcall ,production))
-     ((stringp production) (mole-parse-anonymous-literal production))
+     ((stringp production) `(mole-parse-anonymous-literal ,production))
      ((consp production)
       (pcase (car production)
         (': (mole-build-sequence-operator (cdr production)))
