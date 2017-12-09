@@ -15,13 +15,16 @@
 (require 'f)
 
 (load (f-expand "mole" (f-parent (f-dirname (f-this-file)))))
+(load (f-expand "mole-cache" (f-parent (f-dirname (f-this-file)))))
 
 (ert-deftest mole-build-production-name ()
   "Ensure that `mole-build-production' assigns the correct name
   to the production."
-  (dolist (prod '((p1 nil ("p1")) (p2 (:lexical t) ("a" "b")) (p3 nil (a b c))))
-    (should (eq (car prod)
-                (car (mole-build-production prod))))))
+  (let* ((productions '((p1 nil ("p1")) (p2 (:lexical t) ("a" "b")) (p3 nil (a b c))))
+         (mole-build-prod-nums (mole-make-prod-num-table (mapcar 'car productions))))
+    (dolist (prod productions)
+      (should (eq (car prod)
+                  (car (mole-build-production prod)))))))
 
 (cl-defmacro mole-define-production-test (productions successes &optional failures)
   "Test that a production production matches correctly.
@@ -51,22 +54,26 @@ FAILURES is a list of strings that NAME should not parse."
        (ert-with-test-buffer (:name ',fullname)
          ;; TODO: Figure out how to work the two levels of quasiquoting
          (eval
-          (list
-           'letrec (list
-                    ,@(mapcar (lambda (p) `(list ',(car p)
-                                                 (cons 'lambda (cdr (mole-build-production ',p)))))
-                              productions))
-           '(dolist (succ ',successes)
-              (unless (consp succ)
-                (setq succ (cons succ (1+ (length succ)))))
-              (erase-buffer) (insert (car succ)) (goto-char (point-min))
-              (should (mole-parse-success-p (funcall ,firstname)))
-              (should (eq (point) (cdr succ))))
-           ,(when failures
-              `'(dolist (f ',failures)
-                  (erase-buffer) (insert f) (goto-char (point-min))
-                  (should (null (mole-parse-success-p (funcall ,firstname))))
-                  (should (bobp)))))
+          (let ((mole-build-prod-nums (mole-make-prod-num-table ',(mapcar 'car productions))))
+            (list
+             'letrec (list
+                      ,@(mapcar (lambda (p) `(list ',(car p)
+                                                   (cons 'lambda (cdr (mole-build-production ',p)))))
+                                productions)
+                      '(mole-runtime-cache nil))
+             '(dolist (succ ',successes)
+                (unless (consp succ)
+                  (setq succ (cons succ (1+ (length succ)))))
+                (erase-buffer) (insert (car succ)) (goto-char (point-min))
+                (setq mole-runtime-cache (make-mole-cache :num-prods ,(length productions)))
+                (should (mole-parse-success-p (funcall ,firstname)))
+                (should (eq (point) (cdr succ))))
+             ,(when failures
+                `'(dolist (f ',failures)
+                    (erase-buffer) (insert f) (goto-char (point-min))
+                    (setq mole-runtime-cache (make-mole-cache :num-prods ,(length productions)))
+                    (should (null (mole-parse-success-p (funcall ,firstname))))
+                    (should (bobp))))))
           t)))))
 
 (mole-define-production-test ((sequence "t" (+ "e") "st"))
@@ -223,41 +230,62 @@ NUM PRODUCTION: appease flycheck."
 (ert-deftest mole-highwater-mark-literal ()
   "Test that literals set the highwater mark correctly."
   (eval
-   `(let* ((whitespace (lambda () nil))
-           (a (lambda ,@(cdr (mole-build-production '(a () ("abc" (char (?d . ?f)))))))))
-      (with-temp-buffer
-        (dolist (fixture '(("abcd" . 4)
-                           ("abce" . 4)
-                           ("abc" . 4)
-                           ("abcx" . 4)
-                           ("abx" . 3)
-                           ("x" . 1)
-                           ("abcfxyz" . 4)))
-          (erase-buffer)
-          (insert (car fixture))
-          (goto-char (point-min))
-          (let ((mole-runtime-highwater-mark 0))
-            (funcall a)
-            (should (= mole-runtime-highwater-mark (cdr fixture)))))))
+   (let ((mole-build-prod-nums (mole-make-prod-num-table '(a whitespace))))
+     `(let* ((whitespace (lambda () nil))
+             (a (lambda ,@(cdr (mole-build-production '(a () ("abc" (char (?d . ?f)))))))))
+        (with-temp-buffer
+          (dolist (fixture '(("abcd" . 4)
+                             ("abce" . 4)
+                             ("abc" . 4)
+                             ("abcx" . 4)
+                             ("abx" . 3)
+                             ("x" . 1)
+                             ("abcfxyz" . 4)))
+            (erase-buffer)
+            (insert (car fixture))
+            (goto-char (point-min))
+            (let ((mole-runtime-highwater-mark 0)
+                  (mole-runtime-cache (make-mole-cache :num-prods 2)))
+              (funcall a)
+              (should (= mole-runtime-highwater-mark (cdr fixture))))))))
    t))
 
 (ert-deftest mole-choice-highwatermark-choice ()
   "Ensure the highwater marks are set correctly in choice parsing."
   (eval
-   `(let* ((whitespace (lambda () nil))
-           (a (lambda ,@(cdr (mole-build-production '(a () ("x" "x" (+ "b") "a" "a"))))))
-           (b (lambda ,@(cdr (mole-build-production '(b () ("xxb"))))))
-           (choice (lambda ,@(cdr (mole-build-production '(choice () ((or a b))))))))
-      (with-temp-buffer
-        (insert "xxbba")
-        (let ((mole-runtime-highwater-mark 0))
-          (goto-char (point-min))
-          (funcall choice)
-          (should (= 6 mole-runtime-highwater-mark)))
-        (let ((mole-runtime-highwater-mark 0))
-          (goto-char (point-min))
-          (funcall b)
-          (should (= 3 mole-runtime-highwater-mark)))))))
+   (let ((mole-build-prod-nums (mole-make-prod-num-table '(whitespace a b choice))))
+     `(let* ((whitespace (lambda () nil))
+             (a (lambda ,@(cdr (mole-build-production '(a () ("x" "x" (+ "b") "a" "a"))))))
+             (b (lambda ,@(cdr (mole-build-production '(b () ("xxb"))))))
+             (choice (lambda ,@(cdr (mole-build-production '(choice () ((or a b))))))))
+        (with-temp-buffer
+          (insert "xxbba")
+          (let ((mole-runtime-highwater-mark 0)
+                (mole-runtime-cache (make-mole-cache :num-prods 4)))
+            (goto-char (point-min))
+            (funcall choice)
+            (should (= 6 mole-runtime-highwater-mark)))
+          (let ((mole-runtime-highwater-mark 0)
+                (mole-runtime-cache (make-mole-cache :num-prods 4)))
+            (goto-char (point-min))
+            (funcall b)
+            (should (= 3 mole-runtime-highwater-mark))))))))
+
+(ert-deftest mole-cached-parse ()
+  "Ensure that parsing uses the cache."
+  (eval
+   `(let* ((extern-fn-call-count 0)
+           (extern-fn (lambda () (cl-incf extern-fn-call-count)
+                        (make-mole-node-literal :pos (point) :end (point))))
+           (g (mole-create-grammar
+               (a e "a")
+               (b (or (: a "x") (: a "y")))
+               (e (extern extern-fn)))))
+
+      (should (equal '(b (a (e "") "a") "y")
+                     (mole-node-to-sexp (mole-parse-string g 'b "ay"))))
+      (should (= 1 extern-fn-call-count)))
+   t))
 
 
 (provide 'mole-tests)

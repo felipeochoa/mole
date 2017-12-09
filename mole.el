@@ -51,6 +51,12 @@ contents e.g., if the character forced backtracking.")
 (defvar mole-runtime-string-parse nil
   "String passed to `mole-parse-string'; used to convert to sexps later.")
 
+(defvar mole-runtime-cache nil
+  "Runtime variable holding the parse cache.")
+
+(defvar mole-build-prod-nums nil
+  "Build-time hashtable mapping production names to their numeric codes.")
+
 (cl-defstruct mole-grammar productions)
 
 (cl-defstruct mole-node name children pos end)
@@ -162,6 +168,21 @@ defaults to simply returning 'fail."
   `(let ((mole-runtime-highwater-mark 0))
      ,@body))
 
+(defmacro mole-cached-result (prod-num &rest body)
+  "Check the parse cache for PROD-NUM or evaluate BODY and cache it."
+  (declare (debug (numberp &rest form)) (indent 1))
+  (cl-assert (numberp prod-num))
+  (let ((res (make-symbol "res")) (beg (make-symbol "beg")))
+    `(if-let (,res (mole-cache-get mole-runtime-cache (point) ,prod-num))
+         (progn (when (mole-parse-success-p ,res) (goto-char (mole-node-end (car ,res))))
+                (mole-update-highwater-mark (cdr ,res))
+                (car ,res))
+       (mole-with-fresh-highwater-mark
+         (let ((,beg (point)))
+           (setq ,res ,@body)
+           (mole-cache-set mole-runtime-cache ,beg mole-runtime-highwater-mark
+                           ,prod-num ,res))))))
+
 (defmacro mole-parse-anonymous-literal (string)
   "Return a new anonymous literal if looking at STRING at point."
   (declare (indent defun) (debug (stringp)))
@@ -190,6 +211,14 @@ defaults to simply returning 'fail."
         (setcdr tail nil)
         (cons config spec))))
 
+  (defun mole-make-prod-num-table (productions)
+    "Create a hashtable for `mole-build-prod-nums' from PRODUCTIONS."
+    (let ((table (make-hash-table :test 'eq)) (i 0))
+      (dolist (p productions)
+        (puthash p i table)
+        (cl-incf i))
+      table))
+
   (defun mole-build-production (spec)
     "Return a (name args body) list for SPEC."
     (cl-destructuring-bind (name props args) spec
@@ -199,7 +228,7 @@ defaults to simply returning 'fail."
             (parse-whitespace `(or mole-runtime-force-lexical
                                    (mole-ignore-hw-mark (funcall whitespace)))))
         (list name ()
-              `(mole-with-fresh-highwater-mark
+              `(mole-cached-result ,(gethash name mole-build-prod-nums)
                  ,(if lexical
                       `(mole-parse-match (,(mole-build-sequence args) ,children)
                          (mole-node ',name ,children ,mole-build-fusing)
@@ -414,14 +443,15 @@ with two arguments that can be funcalled to parse 'whitespace or
         (unless (plist-get (cadr whitespace) :lexical)
           (error "`whitespace' production must be lexical"))
       (push mole-default-whitespace-terminal productions)))
-  `(let (,@(mapcar 'car productions))
-     ,@(mapcar (lambda (spec)
-                 (cl-destructuring-bind (name args body) (mole-build-production spec)
-                   `(setq ,name (lambda ,args ,body))))
-               productions)
-     (make-mole-grammar :productions (list ,@(mapcar (lambda (term)
-                                                       `(cons ',(car term) ,(car term)))
-                                                     productions)))))
+  (let ((mole-build-prod-nums (mole-make-prod-num-table (mapcar 'car productions))))
+    `(let (,@(mapcar 'car productions))
+       ,@(mapcar (lambda (spec)
+                   (cl-destructuring-bind (name args body) (mole-build-production spec)
+                     `(setq ,name (lambda ,args ,body))))
+                 productions)
+       (make-mole-grammar :productions (list ,@(mapcar (lambda (term)
+                                                         `(cons ',(car term) ,(car term)))
+                                                       productions))))))
 
 (defun mole-munge-productions (productions)
   "Munge PRODUCTIONS from the user-friendly format into a list of specs."
@@ -443,7 +473,9 @@ with two arguments that can be funcalled to parse 'whitespace or
   "Attempt to parse GRAMMAR's PRODUCTION starting at point."
   (setq mole-runtime-string-parse nil)
   (save-excursion
-    (let ((mole-runtime-highwater-mark (point)))
+    (let ((mole-runtime-highwater-mark (point))
+          (mole-runtime-cache
+           (make-mole-cache :num-prods (length (mole-grammar-productions grammar)))))
      (if-let ((parser (assq production (mole-grammar-productions grammar))))
         (funcall (cdr parser))
       (error "Production %S not defined in grammar" production)))))
