@@ -229,21 +229,24 @@ defaults to simply returning 'fail."
     (cl-destructuring-bind (name props args) spec
       (let ((children (make-symbol "children"))
             (lexical (plist-get props :lexical))
+            (params (plist-get props :params))
             (mole-build-fusing (plist-get props :fuse))
             (parse-whitespace `(or mole-runtime-force-lexical
                                    (mole-ignore-hw-mark (funcall whitespace)))))
-        (list name (plist-get props :params)
-              `(mole-cached-result ,(gethash name mole-build-prod-nums)
-                 ,(if lexical
-                      `(mole-parse-match (,(mole-build-sequence args) ,children)
-                         (mole-node ',name ,children ,mole-build-fusing)
-                         'fail)
-                    `(mole-maybe-save-excursion
-                       ,parse-whitespace
-                       (mole-parse-match (,(mole-build-sequence args) ,children)
-                         (progn ,parse-whitespace
-                                (mole-node ',name ,children ,mole-build-fusing))
-                         'fail))))))))
+        (list name params
+              `(,@(if params
+                      '(progn)
+                    (list 'mole-cached-result (gethash name mole-build-prod-nums)))
+                ,(if lexical
+                     `(mole-parse-match (,(mole-build-sequence args) ,children)
+                        (mole-node ',name ,children ,mole-build-fusing)
+                        'fail)
+                   `(mole-maybe-save-excursion
+                      ,parse-whitespace
+                      (mole-parse-match (,(mole-build-sequence args) ,children)
+                        (progn ,parse-whitespace
+                               (mole-node ',name ,children ,mole-build-fusing))
+                        'fail))))))))
 
   (defun mole-build-element (production)
     "Compile PRODUCTION into recursive calls."

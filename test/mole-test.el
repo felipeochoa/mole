@@ -169,6 +169,10 @@ NUM PRODUCTION: appease flycheck."
                               (with-params :params (x y) (+ x) (2 y)))
   ("abbccccdd") ("" "abb" "cdd"))
 
+(mole-define-production-test ((non-caching-parametric (or (p "a") (p "b")))
+                              (p :params (x) x))
+  ("a" "b") ("" "x"))
+
 (ert-deftest mole-fuse-production ()
   "Ensure fusing productions join their children."
   (let* ((g (eval `(mole-create-grammar
