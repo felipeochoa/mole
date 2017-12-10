@@ -263,6 +263,7 @@ defaults to simply returning 'fail."
         ((or '\?= '=) (mole-build-lookahead (cdr production)))
         ((or '\?! '!) (mole-build-negative-lookahead (cdr production)))
         ('char (mole-build-char (cdr production)))
+        ('char-not (mole-build-char-not (cdr production)))
         ('lexical (mole-build-lexical (cdr production)))
         ('extern (mole-build-extern (cdr production)))
         ((pred numberp) (mole-build-repetition production))
@@ -379,6 +380,15 @@ a single string literal."
   (defun mole-build-char (sets)
     "Return a form for matching SETS of characters, like using char in `rx'."
     `(if (looking-at (rx (char ,@sets)))
+         (progn (forward-char)
+                (mole-update-highwater-mark (1- (point)))
+                (make-mole-node-literal :pos (1- (point)) :end (point)))
+       (mole-update-highwater-mark (point))
+       'fail))
+
+  (defun mole-build-char-not (sets)
+    "Return a form for matching characters not in SETS, like using (not (any ...)) in `rx'."
+    `(if (looking-at (rx (not (any ,@sets))))
          (progn (forward-char)
                 (mole-update-highwater-mark (1- (point)))
                 (make-mole-node-literal :pos (1- (point)) :end (point)))

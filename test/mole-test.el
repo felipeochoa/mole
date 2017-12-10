@@ -96,6 +96,10 @@ FAILURES is a list of strings that NAME should not parse."
   ("1234567890abcdef" "1234567890ABCDEF")
   ("" "xyz"))
 
+(mole-define-production-test ((char-not (+ (char-not "abcd"))))
+  ("\u4321" "efgh" ("efgha" . 5))
+  ("" "a" "b" "c" "d"))
+
 (mole-define-production-test ((zero-or-more (* "t" "a")))
   ("" "tatatata" ("xx" . 1)))
 
