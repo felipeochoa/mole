@@ -44,11 +44,7 @@ FAILURES is a list of strings that NAME should not parse."
   (let* ((firstname (caar productions))
          (fullname (intern (format "mole-builders-%s" firstname))))
     (unless (assq 'whitespace productions)
-      (push (apply 'append
-                   (list (car mole-default-whitespace-terminal))
-                   (cadr mole-default-whitespace-terminal)
-                   (cddr mole-default-whitespace-terminal))
-            productions))
+      (push mole-default-whitespace-terminal productions))
     (cl-callf mole-munge-productions productions)
     `(ert-deftest ,fullname ()
        (ert-with-test-buffer (:name ',fullname)

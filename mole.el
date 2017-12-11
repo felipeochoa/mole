@@ -19,7 +19,7 @@
 (require 'subr-x)
 
 (defvar mole-default-whitespace-terminal
-  '(whitespace (:lexical t :fuse t) ((* (char " \t\n\f"))))
+  '(whitespace :lexical t :fuse t (* (char " \t\n\f")))
   "If a grammar doesn't specify whitespace, this value will be used.")
 
 (defvar mole-production-keys '(:lexical :fuse :params)
@@ -461,12 +461,11 @@ refer to other productions by their names.  E.g.,
 \(extern 'my-parse-func whitespace number) will call 'my-parse-func
 with two arguments that can be funcalled to parse 'whitespace or
 'number."
+  (unless (assq 'whitespace productions)
+    (push mole-default-whitespace-terminal productions))
   (cl-callf mole-munge-productions productions)
-  (let ((whitespace (assq 'whitespace productions)))
-    (if whitespace
-        (unless (plist-get (cadr whitespace) :lexical)
-          (error "`whitespace' production must be lexical"))
-      (push mole-default-whitespace-terminal productions)))
+  (unless (plist-get (cadr (assq 'whitespace productions)) :lexical)
+    (error "`whitespace' production must be lexical"))
   (let ((mole-build-prod-nums (mole-make-prod-num-table (mapcar 'car productions))))
     `(let (,@(mapcar 'car productions))
        ,@(mapcar (lambda (spec)
