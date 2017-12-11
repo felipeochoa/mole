@@ -92,15 +92,21 @@ If NAME indicates that the node should be an operator, a
   (let ((kids (make-symbol "kids")))
     (unless pos (setq pos `(if ,kids (mole-node-pos (car ,kids)) (point))))
     (unless end (setq end `(if ,kids (mole-node-end (car (last ,kids))) (point))))
-   `(let ((,kids ,children))
+    `(let ((,kids ,children))
       ,(cond
         ((and (memq name mole-operator-names) fuse)
-         `(make-mole-node-literal :pos ,pos :end ,end))
+         `(mole-node-literal ,pos ,end))
         ((memq name mole-operator-names)
          `(make-mole-node-operator :name ',name :children ,kids :pos ,pos :end ,end))
         (fuse `(make-mole-node :name ',name :pos ,pos :end ,end
-                               :children (list (make-mole-node-literal :pos ,pos :end ,end))))
+                               :children (list (mole-node-literal ,pos ,end))))
         (t `(make-mole-node :name ',name :children ,kids :pos ,pos :end ,end))))))
+
+(defsubst mole-node-literal (pos end)
+  "Construct a `mole-node-literal' instance.
+POS and END refer to the buffer locations where the node match
+started and ended."
+  (make-mole-node-literal :pos pos :end end))
 
 (cl-defmethod mole-node-to-sexp ((node mole-node))
   "Convert NODE into a test-friendly sexp."
@@ -199,7 +205,7 @@ defaults to simply returning 'fail."
            (cl-incf ,i))
          (if (= ,i ,(length string))
              (progn (mole-update-highwater-mark (1- (point)))
-                    (make-mole-node-literal :pos ,pos :end (point)))
+                    (mole-node-literal ,pos (point)))
            (mole-update-highwater-mark (point))
            'fail)))))
 
@@ -342,12 +348,12 @@ a single string literal."
   (defun mole-build-lookahead (productions)
     "Return a form for evaluating PRODUCTIONS in `save-excursion'."
     `(mole-parse-match ((save-excursion ,(mole-build-sequence productions)) _)
-       (make-mole-node-literal :pos (point) :end (point)) 'fail))
+       (mole-node-literal (point) (point)) 'fail))
 
   (defun mole-build-negative-lookahead (productions)
     "Return a form for evaluating (not PRODUCTION-FORM) in `save-excursion'."
     `(mole-parse-match ((save-excursion ,(mole-build-sequence productions)) _)
-       'fail (make-mole-node-literal :pos (point) :end (point))))
+       'fail (mole-node-literal (point) (point))))
 
   (defun mole-build-repetition (productions)
     "Return a form for evaluating PRODUCTIONS multiple times."
@@ -382,7 +388,7 @@ a single string literal."
     `(if (looking-at (rx (char ,@sets)))
          (progn (forward-char)
                 (mole-update-highwater-mark (1- (point)))
-                (make-mole-node-literal :pos (1- (point)) :end (point)))
+                (mole-node-literal (1- (point)) (point)))
        (mole-update-highwater-mark (point))
        'fail))
 
@@ -391,7 +397,7 @@ a single string literal."
     `(if (looking-at (rx (not (any ,@sets))))
          (progn (forward-char)
                 (mole-update-highwater-mark (1- (point)))
-                (make-mole-node-literal :pos (1- (point)) :end (point)))
+                (mole-node-literal (1- (point)) (point)))
        (mole-update-highwater-mark (point))
        'fail))
 
