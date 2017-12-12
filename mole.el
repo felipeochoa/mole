@@ -50,6 +50,9 @@ body.")
 This position may be beyond than the end of the realized node's
 contents e.g., if the character forced backtracking.")
 
+(defvar mole-build-lexical nil
+  "If t, literal parsing builders won't chomp whitespace.")
+
 (defvar mole-build-fusing nil
   "Build-time dynamic variable to generate fusing nodes.")
 
@@ -194,14 +197,23 @@ defaults to simply returning 'fail."
            (mole-cache-set mole-runtime-cache ,beg mole-runtime-highwater-mark
                            ,prod-num ,res))))))
 
-(defmacro mole-parse-anonymous-literal (string)
-  "Return a new anonymous literal if looking at STRING at point."
-  (declare (indent defun) (debug (stringp)))
+(defmacro mole-chomp-whitespace ()
+  "Chomp whitespace unless `mole-runtime-force-lexical' is t."
+  `(or mole-runtime-force-lexical
+       (mole-ignore-hw-mark (funcall whitespace))))
+
+(defmacro mole-parse-anonymous-literal (string lexical)
+  "Return a literal-parsing form for STRING.
+STRING is the string to parse, LEXICAL is t if whitespace should
+never be chomped.  (This second arg is used so that
+`mole-build-lexical' can be eagerly evaluated at build time.)"
+  (declare (indent defun) (debug (stringp (or "t" "nil"))))
   (if (= 1 (length string))
       `(if (eq (char-after) ,(aref string 0))
-           (progn (forward-char)
-                  (mole-update-highwater-mark (1- (point)))
-                  (mole-node-literal (1- (point)) (point)))
+           (prog1 (mole-node-literal (point) (1+ (point)))
+             (mole-update-highwater-mark (point))
+             (forward-char)
+             ,(unless lexical `(mole-chomp-whitespace)))
          (mole-update-highwater-mark (point))
          'fail)
     (let ((i (make-symbol "i")) (pos (make-symbol "pos")))
@@ -211,8 +223,9 @@ defaults to simply returning 'fail."
              (forward-char)
              (cl-incf ,i))
            (if (= ,i ,(length string))
-               (progn (mole-update-highwater-mark (1- (point)))
-                      (mole-node-literal ,pos (point)))
+               (prog1 (mole-node-literal ,pos (point))
+                 (mole-update-highwater-mark (1- (point)))
+                 ,(unless lexical `(mole-chomp-whitespace)))
              (mole-update-highwater-mark (point))
              'fail))))))
 
@@ -240,32 +253,28 @@ defaults to simply returning 'fail."
   (defun mole-build-production (spec)
     "Return a (name args body) list for SPEC."
     (cl-destructuring-bind (name props args) spec
-      (let ((children (make-symbol "children"))
-            (lexical (plist-get props :lexical))
-            (params (plist-get props :params))
-            (mole-build-fusing (plist-get props :fuse))
-            (parse-whitespace `(or mole-runtime-force-lexical
-                                   (mole-ignore-hw-mark (funcall whitespace)))))
-        (list name params
-              `(,@(if params
-                      '(progn)
-                    (list 'mole-cached-result (gethash name mole-build-prod-nums)))
-                ,(if lexical
-                     `(mole-parse-match (,(mole-build-sequence args) ,children)
-                        (mole-node ',name ,children ,mole-build-fusing)
-                        'fail)
-                   `(mole-maybe-save-excursion
-                      ,parse-whitespace
-                      (mole-parse-match (,(mole-build-sequence args) ,children)
-                        (progn ,parse-whitespace
-                               (mole-node ',name ,children ,mole-build-fusing))
-                        'fail))))))))
+      (let* ((children (make-symbol "children"))
+             (params (plist-get props :params))
+             (mole-build-lexical (plist-get props :lexical))
+             (mole-build-fusing (plist-get props :fuse))
+             (body `(mole-parse-match (,(mole-build-sequence args) ,children)
+                      (mole-node ',name ,children ,mole-build-fusing)
+                      'fail)))
+        (unless mole-build-lexical
+          (setq body `(mole-maybe-save-excursion
+                        (mole-chomp-whitespace)
+                        (prog1 ,body
+                          ;; Need to chomp again in case final production is lexical
+                          (mole-chomp-whitespace)))))
+        (unless params
+          (setq body `(mole-cached-result ,(gethash name mole-build-prod-nums) ,body)))
+        (list name params body))))
 
   (defun mole-build-element (production)
     "Compile PRODUCTION into recursive calls."
     (cond
      ((symbolp production) `(funcall ,production))
-     ((stringp production) `(mole-parse-anonymous-literal ,production))
+     ((stringp production) `(mole-parse-anonymous-literal ,production ,mole-build-lexical))
      ((consp production)
       (pcase (car production)
         (': (mole-build-sequence-operator (cdr production)))
@@ -393,18 +402,20 @@ a single string literal."
   (defun mole-build-char (sets)
     "Return a form for matching SETS of characters, like using char in `rx'."
     `(if (looking-at (rx (char ,@sets)))
-         (progn (forward-char)
-                (mole-update-highwater-mark (1- (point)))
-                (mole-node-literal (1- (point)) (point)))
+         (prog1 (mole-node-literal (point) (1+ (point)))
+           (mole-update-highwater-mark (point))
+           (forward-char)
+           ,(unless mole-build-lexical `(mole-chomp-whitespace)))
        (mole-update-highwater-mark (point))
        'fail))
 
   (defun mole-build-char-not (sets)
     "Return a form for matching characters not in SETS, like using (not (any ...)) in `rx'."
     `(if (looking-at (rx (not (any ,@sets))))
-         (progn (forward-char)
-                (mole-update-highwater-mark (1- (point)))
-                (mole-node-literal (1- (point)) (point)))
+         (prog1 (mole-node-literal (point) (1+ (point)))
+           (mole-update-highwater-mark (point))
+           (forward-char)
+           ,(unless mole-build-lexical `(mole-chomp-whitespace)))
        (mole-update-highwater-mark (point))
        'fail))
 

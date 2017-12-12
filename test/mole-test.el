@@ -129,9 +129,12 @@ FAILURES is a list of strings that NAME should not parse."
   ("" ("tes" . 1))
   ("test"))
 
-(mole-define-production-test ((whitespace-backtracking "a" (or nonterminal "b"))
+(mole-define-production-test ((whitespace-non-lexical "a" "b"))
+  ("ab" "  ab  " " a   b  "))
+
+(mole-define-production-test ((whitespace-backtracking :lexical t "a" (or nonterminal "b"))
                               (nonterminal "x"))
-  ("ab" "  ab  " " a   x  ") ("a b"))
+  ("ab" "a   x  ") ("a b"))
 
 (mole-define-production-test ((lexical lexical-callee lexical-callee)
                               (lexical-callee :lexical t "a"))
