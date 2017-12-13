@@ -77,6 +77,33 @@ ENTRIES is a list of (pos end prod result) lists."
     (should (equal '(result-2 . 7) (mole-cache-get cache 5 2 nil))) ; don't clobber
     (should (equal '(result-1 . 5) (mole-cache-get cache 5 1 nil)))))
 
+(ert-deftest mole-cache-get-set-with-context ()
+  "Ensure context matching is used to invalidate the cache."
+  (let ((cache (mole-cache-test-cache '((5 8 1 c1 result1)
+                                        (8 10 1 c2 result2)))))
+    (should (equal '(result1 . 8) (mole-cache-get cache 5 1 'c1)))
+    (should-not (mole-cache-get cache 5 1 'c2 t))
+
+    (should (equal '(result2 . 10) (mole-cache-get cache 8 1 'c2)))
+    (should-not (mole-cache-get cache 8 1 'c1 t))))
+
+(ert-deftest mole-cache-custom-context-compare-fn ()
+  "Ensure context matching is used to invalidate the cache."
+  (let ((cache (mole-cache-test-cache '((5 8 1 (c . 1) result1)
+                                        (8 10 1 (c . 2) result2)))))
+    ;; Sanity checks:
+    (should-not (mole-cache-get cache 5 1 '(c . 1)))
+    (should-not (mole-cache-get cache 5 1 '(c . 2)))
+    (should-not (mole-cache-get cache 8 1 '(c . 1)))
+    (should-not (mole-cache-get cache 8 1 '(c . 2)))
+
+    (setf (mole-cache-context-compare-fn cache) #'equal)
+    (should (equal '(result1 . 8) (mole-cache-get cache 5 1 '(c . 1))))
+    (should-not (mole-cache-get cache 5 1 '(c . 2)))
+
+    (should (equal '(result2 . 10) (mole-cache-get cache 8 1 '(c . 2))))
+    (should-not (mole-cache-get cache 8 1 '(c . 1)))))
+
 (ert-deftest mole-cache-get-remove ()
   "Ensure the entry is removed when REMOVE is t."
   (let ((cache (mole-cache-test-cache '((5 8 1 nil result-1)
