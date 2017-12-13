@@ -50,6 +50,17 @@ body.")
 This position may be beyond than the end of the realized node's
 contents e.g., if the character forced backtracking.")
 
+(defvar mole-runtime-context nil
+  "Alist of dynamically active context values.
+A parsing context is a mapping of symbol and number keys to
+arbitrary values.  The parse cache only stores one entry per
+\(production . position\) pair, and it stores the parse context
+alongside it.  Subsequent parsings will only use the cache if the
+parsing context is shallow equal to the cached context.  If the
+new context does not match the old context, then the production
+is parsed again and the new result and context replace the cache
+contents.")
+
 (defvar mole-build-lexical nil
   "If t, literal parsing builders won't chomp whitespace.")
 
@@ -187,7 +198,7 @@ defaults to simply returning 'fail."
   (declare (debug (numberp &rest form)) (indent 1))
   (cl-assert (numberp prod-num))
   (let ((res (make-symbol "res")) (beg (make-symbol "beg")))
-    `(if-let (,res (mole-cache-get mole-runtime-cache (point) ,prod-num nil))
+    `(if-let (,res (mole-cache-get mole-runtime-cache (point) ,prod-num mole-runtime-context))
          (progn (when (mole-parse-success-p ,res) (goto-char (mole-node-end (car ,res))))
                 (mole-update-highwater-mark (cdr ,res))
                 (car ,res))
@@ -195,7 +206,7 @@ defaults to simply returning 'fail."
          (let ((,beg (point)))
            (setq ,res ,@body)
            (mole-cache-set mole-runtime-cache ,beg mole-runtime-highwater-mark
-                           ,prod-num nil ,res))))))
+                           ,prod-num mole-runtime-context ,res))))))
 
 (defmacro mole-chomp-whitespace ()
   "Chomp whitespace unless `mole-runtime-force-lexical' is t."
