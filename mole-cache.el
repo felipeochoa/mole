@@ -50,6 +50,10 @@ cache result is not returned.  Defaults to `eq'."
   (dirty (vector 0 0 0))
   (context-compare-fn #'eq))
 
+(defsubst mole-cache (num-prods &optional context-compare-fn)
+  "Create a new `mole-cache' with NUM-PRODS and CONTEXT-COMPARE-FN."
+  (make-mole-cache :num-prods num-prods :context-compare-fn context-compare-fn))
+
 (defun mole-cache-dirty-start (cache)
   "Return the start of the dirty region for CACHE, in old coords."
   (aref (mole-cache-dirty cache) 0))

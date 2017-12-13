@@ -18,6 +18,19 @@
 (require 'cl-lib)
 (require 'subr-x)
 
+;; this-file is inlined from 'f package
+(let* ((this-file (cond
+                   (load-in-progress load-file-name)
+                   ((and (boundp 'byte-compile-current-file) byte-compile-current-file)
+                    byte-compile-current-file)
+                   (:else (buffer-file-name))))
+       (default-directory (file-name-directory this-file)))
+  (require 'mole-cache (expand-file-name "mole-cache"))
+  (require 'mole-context (expand-file-name "mole-context")))
+
+(declare-function mole-cache "mole-cache")
+(declare-function mole-context-compare "mole-context")
+
 (defvar mole-default-whitespace-terminal
   '(whitespace :lexical t :fuse t (* (char " \t\n\f")))
   "If a grammar doesn't specify whitespace, this value will be used.")
@@ -559,8 +572,7 @@ with two arguments that can be funcalled to parse 'whitespace or
   (save-excursion
     (let ((mole-runtime-highwater-mark (point))
           (mole-runtime-cache
-           (make-mole-cache :num-prods (length (mole-grammar-productions grammar))
-                            :context-compare-fn #'mole-context-compare)))
+           (mole-cache (length (mole-grammar-productions grammar)) #'mole-context-compare)))
      (if-let ((parser (assq production (mole-grammar-productions grammar))))
         (funcall (cdr parser))
       (error "Production %S not defined in grammar" production)))))
