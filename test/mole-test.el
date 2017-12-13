@@ -16,6 +16,7 @@
 
 (load (f-expand "mole" (f-parent (f-dirname (f-this-file)))))
 (load (f-expand "mole-cache" (f-parent (f-dirname (f-this-file)))))
+(load (f-expand "mole-context" (f-parent (f-dirname (f-this-file)))))
 
 (ert-deftest mole-build-production-name ()
   "Ensure that `mole-build-production' assigns the correct name
@@ -297,6 +298,44 @@ NUM PRODUCTION: appease flycheck."
                      (mole-node-to-sexp (mole-parse-string g 'b "ay"))))
       (should (= 1 extern-fn-call-count)))
    t))
+
+(ert-deftest mole-cached-parse-with-context ()
+  (eval
+   `(let* ((extern-fn-call-count 0)
+           (extern-fn (lambda () (cl-incf extern-fn-call-count)
+                        (make-mole-node-literal :pos (point) :end (point))))
+           (g (mole-create-grammar
+               (a e "a")
+               (b (or (: (with-context (k 'v) a) "x") (: (with-context (k 'v) a) "y")))
+               (e (extern extern-fn)))))
+
+      (should (equal '(b (a (e "") "a") "y")
+                     (mole-node-to-sexp (mole-parse-string g 'b "ay"))))
+      (should (= 1 extern-fn-call-count)))
+   t))
+
+(ert-deftest mole-cached-parse-context-mismatch ()
+  (eval
+   `(let* ((extern-fn-call-count 0)
+           (extern-fn (lambda () (cl-incf extern-fn-call-count)
+                        (make-mole-node-literal :pos (point) :end (point))))
+           (g (mole-create-grammar
+               (a e "a")
+               (b (or (: (with-context (k 'v1) a) "x") (: (with-context (k 'v2) a) "y")))
+               (e (extern extern-fn)))))
+      (should (equal '(b (a (e "") "a") "y")
+                     (mole-node-to-sexp (mole-parse-string g 'b "ay"))))
+      (should (= 2 extern-fn-call-count)))
+   t))
+
+(mole-define-production-test ((with-context (with-context (x 123) (or p1 "aa" p2 "bb")))
+                              (p1 (if-context (x 123) "a"))
+                              (p2 (if-context (x 456) "b")))
+  ("a" ("aa" . 2) "bb") ("" "b"))
+
+(mole-define-production-test ((with-context-empty (or p1 "aa"))
+                              (p1 (if-context (x 123) "a")))
+  ("aa") ("" "a"))
 
 
 (provide 'mole-tests)

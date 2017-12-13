@@ -39,7 +39,8 @@ body.")
 (defvar mole-default-props '()
   "Plist of `mole-production-keys' to use as defaults values.")
 
-(defvar mole-operator-names '(: or * + \? \?= \?! opt = ! char lexical extern repetition)
+(defvar mole-operator-names '(: or * + \? \?= \?! opt = ! char lexical extern repetition
+                                with-context if-context)
   "List of symbols reserved for mole operators.")
 
 (defvar mole-runtime-force-lexical nil
@@ -145,7 +146,11 @@ started and ended."
 
 (cl-defmethod mole-node-to-sexp ((op mole-node-operator))
   "Convert OP into a test-friendly sexp."
-  (mapcar 'mole-node-to-sexp (mole-node-children op)))
+  (cl-mapcan (lambda (child)
+               (if (mole-node-operator-p child)
+                   (mole-node-to-sexp child)
+                 (list (mole-node-to-sexp child))))
+             (mole-node-children op)))
 
 (defun mole-parse-success-p (result)
   "Return t if RESULT indicates a successful parse."
@@ -299,6 +304,8 @@ never be chomped.  (This second arg is used so that
         ('char-not (mole-build-char-not (cdr production)))
         ('lexical (mole-build-lexical (cdr production)))
         ('extern (mole-build-extern (cdr production)))
+        ('with-context (mole-build-with-context (cdr production)))
+        ('if-context (mole-build-if-context (cdr production)))
         ((pred numberp) (mole-build-repetition production))
         ((pred symbolp) (mole-build-parametric-call production))
         (_ (error "Unknown production %S" production))))
@@ -430,6 +437,25 @@ a single string literal."
        (mole-update-highwater-mark (point))
        'fail))
 
+  (cl-defun mole-build-with-context (((key value) &rest productions))
+    "Add (KEY . VALUE) to the parse context and execute PRODUCTIONS."
+    (cl-assert (symbolp key))
+    (let ((res (make-symbol "res")))
+      `(let ((mole-runtime-context (mole-context-set mole-runtime-context ',key ,value)))
+         (mole-parse-match (,(mole-build-sequence productions) ,res)
+           (mole-node 'with-context ,res ,mole-build-fusing)
+           'fail))))
+
+  (cl-defun mole-build-if-context (((key value) &rest productions))
+    "If context[KEY] is VALUE, execute PRODUCTIONS."
+    (cl-assert (symbolp key))
+    (let ((res (make-symbol "res")))
+      `(if (eq ,value (mole-context-get mole-runtime-context ',key))
+           (mole-parse-match (,(mole-build-sequence productions) ,res)
+             (mole-node 'if-context ,res ,mole-build-fusing)
+             'fail)
+         'fail)))
+
   (cl-defun mole-build-extern ((fn &rest args))
     "Build a custom matcher calling FN with ARGS."
     `(apply ,fn (list ,@args)))
@@ -533,7 +559,8 @@ with two arguments that can be funcalled to parse 'whitespace or
   (save-excursion
     (let ((mole-runtime-highwater-mark (point))
           (mole-runtime-cache
-           (make-mole-cache :num-prods (length (mole-grammar-productions grammar)))))
+           (make-mole-cache :num-prods (length (mole-grammar-productions grammar))
+                            :context-compare-fn #'mole-context-compare)))
      (if-let ((parser (assq production (mole-grammar-productions grammar))))
         (funcall (cdr parser))
       (error "Production %S not defined in grammar" production)))))
