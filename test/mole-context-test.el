@@ -50,6 +50,12 @@
   (should (eq (mole-context-get '((b . 2) (a . 1)) 'b) 2))
   (should (eq (mole-context-get '((a . 1) (b . 2)) 'c) nil)))
 
+(ert-deftest mole-context-set-from-nil ()
+  (let (ctx)
+    (should (equal (mole-context-test-sort (mole-context-set ctx 'c 3))
+                   '((c . 3))))
+    (should (eq ctx nil))))
+
 (ert-deftest mole-context-set-new ()
   (let ((ctx '((a . 1) (b . 2))))
     (should (equal (mole-context-test-sort (mole-context-set ctx 'c 3))

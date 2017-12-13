@@ -42,16 +42,17 @@
   "Return a new context like CTX, but with KEY set to VAL."
   (cons
    (cons key val)
-   (if (eq (caar ctx) key)
-       (cdr ctx)
-     (let ((tail ctx) (i 0) (res ctx))
-       (while (setq i (1+ i) tail (cdr tail))
-         (when (eq key (caar tail))
-           (setq res nil)
-           (dotimes (_ i) (push (pop ctx) res))
-           (setq tail nil
-                 res (nconc (nreverse res) (cdr tail)))))
-       res))))
+   (cond
+    ((null ctx) nil)
+    ((eq (caar ctx) key) (cdr ctx))
+    (t (let ((tail ctx) (i 0) (res ctx))
+         (while (setq i (1+ i) tail (cdr tail))
+           (when (eq key (caar tail))
+             (setq res nil)
+             (dotimes (_ i) (push (pop ctx) res))
+             (setq tail nil
+                   res (nconc (nreverse res) (cdr tail)))))
+         res)))))
 
 (provide 'mole-context)
 
