@@ -36,11 +36,19 @@ NUM-ENTRIES -- how many parse results are stored in here.
 
 DIRTY -- a length-3 vector with [start end delta], indicating
 where the buffer is dirty (in old buffer coords) and the net
-increase in characters in the dirty area."
+increase in characters in the dirty area.
+
+CONTEXT-COMPARE-FN -- a 2-argument function used to check whether
+a passed in context matches the cached context (t indicates a
+match).  When retrieving a cache result, the passed in context is
+compared with the stored context using the cache's
+CONCTEXT-COMPARE-FN attribute.  If the contexts don't match, the
+cache result is not returned.  Defaults to `eq'."
   (table (make-hash-table :test 'eq))
   (num-prods (error "NUM-PRODS is required"))
   (num-entries 0)
-  (dirty (vector 0 0 0)))
+  (dirty (vector 0 0 0))
+  (context-compare-fn #'eq))
 
 (defun mole-cache-dirty-start (cache)
   "Return the start of the dirty region for CACHE, in old coords."
@@ -146,8 +154,12 @@ Relies on the last element of VEC being this value."
     (setf (mole-cache-results-vector-num-entries vec) 0)
     vec))
 
+(defsubst mole-cache-compare-contexts (cache c1 c2)
+  "Use CACHE's compare-context-fn to compare C1 and C2."
+  (funcall (mole-cache-context-compare-fn cache) c1 c2))
+
 (cl-defstruct (mole-cache-result
-               (:constructor make-mole-cache-result (pos end result)))
+               (:constructor make-mole-cache-result (pos end context result)))
   "Contains the result of a parse.
 In order to enable incremental parsing, parse results have an
 `end' field that indicates the furthest point the parser reached
@@ -156,6 +168,7 @@ productions, this point can be past the end of the matched
 node."
   pos
   end
+  context
   result)
 
 (defun mole-cache-result-valid-p (res cache)
@@ -164,13 +177,15 @@ node."
       (or (<= (mole-cache-result-end res) dirty-beg)
           (>= (mole-cache-result-pos res) dirty-end))))
 
-(defun mole-cache-set (cache pos end prod-num res)
+(defun mole-cache-set (cache pos end prod-num context res)
   "Store a parse result into CACHE.
 POS is the buffer location where parsing is happening.  END is
 the last buffer position encountered by the parser.  If the
 buffer gets dirty between POS and END, the result will be
 invalidated.  PROD-NUM is the numerical index of the production
-to check.  RES is the result to store, which is returned."
+to check.  CONTEXT is an opaque object used to invalidate cached
+entries (see `mole-cache''s CONTEXT-COMPARE-FN for details).  RES
+is the result to store, which is returned."
   (cl-assert (mole-cache-clean-p cache))
   (let* ((old-pos (mole-cache-new-to-old cache pos))
          (pos-table (mole-cache-table cache))
@@ -180,13 +195,15 @@ to check.  RES is the result to store, which is returned."
     (unless (aref pos-results prod-num)
       (cl-incf (mole-cache-num-entries cache))
       (cl-incf (mole-cache-results-vector-num-entries pos-results)))
-    (setf (aref pos-results prod-num) (make-mole-cache-result pos end res))
+    (setf (aref pos-results prod-num) (make-mole-cache-result pos end context res))
     res))
 
-(defun mole-cache-get (cache pos prod-num &optional remove)
+(defun mole-cache-get (cache pos prod-num context &optional remove)
   "Retrieve a parse result from CACHE or nil if not cached.
 POS is the buffer location where parsing is happening.  PROD-NUM
-is the numerical index of the production to check.  REMOVE, if
+is the numerical index of the production to check.  CONTEXT is an
+opaque object used to invalidate cached entries (see
+`mole-cache''s CONTEXT-COMPARE-FN for details).  REMOVE, if
 non-nil indicates that the entry should be removed from the
 cache.
 
@@ -199,8 +216,10 @@ reach while parsing RES (in current buffer coordinates)."
     (when-let (pos-results (gethash old-pos (mole-cache-table cache)))
       (when-let (res (aref pos-results prod-num))
         (if (mole-cache-result-valid-p res cache)
-            (setq res (cons (mole-cache-result-result res)
-                            (mole-cache-old-to-new* cache (mole-cache-result-end res))))
+            (if (mole-cache-compare-contexts cache (mole-cache-result-context res) context)
+                (setq res (cons (mole-cache-result-result res)
+                                (mole-cache-old-to-new* cache (mole-cache-result-end res))))
+              (setq res nil))
           (setq remove t)
           (setq res nil))
         (when remove

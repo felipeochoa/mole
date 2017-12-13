@@ -187,7 +187,7 @@ defaults to simply returning 'fail."
   (declare (debug (numberp &rest form)) (indent 1))
   (cl-assert (numberp prod-num))
   (let ((res (make-symbol "res")) (beg (make-symbol "beg")))
-    `(if-let (,res (mole-cache-get mole-runtime-cache (point) ,prod-num))
+    `(if-let (,res (mole-cache-get mole-runtime-cache (point) ,prod-num nil))
          (progn (when (mole-parse-success-p ,res) (goto-char (mole-node-end (car ,res))))
                 (mole-update-highwater-mark (cdr ,res))
                 (car ,res))
@@ -195,7 +195,7 @@ defaults to simply returning 'fail."
          (let ((,beg (point)))
            (setq ,res ,@body)
            (mole-cache-set mole-runtime-cache ,beg mole-runtime-highwater-mark
-                           ,prod-num ,res))))))
+                           ,prod-num nil ,res))))))
 
 (defmacro mole-chomp-whitespace ()
   "Chomp whitespace unless `mole-runtime-force-lexical' is t."
