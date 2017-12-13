@@ -48,4 +48,5 @@ before_install:
 install:
   - cask install
 script:
+  - cask emacs --batch -Q --eval "(when (check-declare-directory \"$PWD\") (kill-emacs 1))"
   - cask exec ert-runner
