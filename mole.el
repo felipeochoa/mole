@@ -485,6 +485,18 @@ a single string literal."
 PRODUCTIONS is a list of (NAME &rest ARGS), where NAME is a
 symbol and ARGS is a list with any of the following elements:
 
+:params -- The following element must be a lambda arglist.  The
+production created will be a parametric production, meaning its
+parse result will not be cached and productions calling it must
+call it with arguments.  This allows building higher-order
+productions.
+
+:lexical -- If the following argument is non-nil, whitespace will
+not be automatically chomped between productions.
+
+:fuse -- If the following argument is non-nil, all child nodes
+will be fused into a single node in the resulting parse tree.
+
 a symbol -- Must be the name of a production node which is
 matched.
 
@@ -493,6 +505,9 @@ a string -- Will be matched literally
 \(char &rest char-spec\) -- Will match a regexp using the `rx'
 char production.  (This only allows character classes, ranges and
 literals).
+
+\(char-not &rest char-spec\) -- A negated char match.  Like using
+^ in a regexp.
 
 \(: &rest prods\) -- Sequence operator.  Match PRODS in order and
 succeed if they all succeed; otherwise fail.
@@ -529,12 +544,25 @@ must match to succeed.  If the second value is a number, the form
 will greedily try to parse beyond the minimal match until PRODS
 stop matching or it reaches the maximum number of repetitions.
 
+\(lexical &rest prods\) -- Match PRODS sequentially, without
+chomping whitespace between productions.
+
+\(with-context (key value) &rest prods\) -- Set KEY to VALUE in
+the parse context and match PRODS sequentially.
+
+\(if-context (key value) &rest prods\) -- If KEY is set to VALUE
+in the parse context (compared with `eq'), match PRODS
+sequentially.
+
 \(extern fn &rest args\) -- Calls FN with ARGS to retrieve a
 parse result.  ARGS is evaluated at grammar build time and can
 refer to other productions by their names.  E.g.,
 \(extern 'my-parse-func whitespace number) will call 'my-parse-func
 with two arguments that can be funcalled to parse 'whitespace or
-'number."
+'number.
+
+Any other (symbol &rest args) argument is considered a call to a
+parametric production (one defined with `:params')."
   (unless (assq 'whitespace productions)
     (push mole-default-whitespace-terminal productions))
   (cl-callf mole-munge-productions productions)
