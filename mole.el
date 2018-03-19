@@ -169,7 +169,7 @@ started and ended."
   "Return t if RESULT indicates a successful parse."
   (not (eq result 'fail)))
 
-(cl-defmacro mole-parse-match ((form res-sym) on-success &optional on-fail)
+(cl-defmacro mole-parse-match ((res-sym form) on-success &optional on-fail)
   "Execute FORM and conditionally execute a followup action.
 RES-SYM is bound to the result of FORM.  If FORM is a successful
 parse, execute ON-SUCCESS.  Otherwise execute ON-FAIL. ON-FAIL
@@ -286,7 +286,7 @@ never be chomped.  (This second arg is used so that
              (params (plist-get props :params))
              (mole-build-lexical (plist-get props :lexical))
              (mole-build-fusing (plist-get props :fuse))
-             (body `(mole-parse-match (,(mole-build-sequence args) ,children)
+             (body `(mole-parse-match (,children ,(mole-build-sequence args))
                       (mole-node ',name ,children ,mole-build-fusing)
                       'fail)))
         (unless mole-build-lexical
@@ -333,7 +333,7 @@ a single string literal."
     (let ((res (make-symbol "res")))
       (if (null (cdr productions))
           ;; special-case single item sequences
-          `(mole-parse-match (,(mole-build-element (car productions)) ,res)
+          `(mole-parse-match (,res ,(mole-build-element (car productions)))
              (list ,res)
              'fail)
         (let ((block-name (make-symbol "block-name")))
@@ -342,7 +342,7 @@ a single string literal."
              (cl-block ,block-name
                (list
                 ,@(mapcar (lambda (prod)
-                            `(mole-parse-match (,(mole-build-element prod) ,res)
+                            `(mole-parse-match (,res ,(mole-build-element prod))
                                ,res
                                (cl-return-from ,block-name ,res)))
                           productions))))))))
@@ -350,7 +350,7 @@ a single string literal."
   (defun mole-build-sequence-operator (productions)
     "Like `mole-build-sequence', but returning a `mole-node-operator'."
     (let ((res (make-symbol "res")))
-      `(mole-parse-match (,(mole-build-sequence productions) ,res)
+      `(mole-parse-match (,res ,(mole-build-sequence productions))
          (mole-node ': ,res ,mole-build-fusing)
          'fail)))
 
@@ -379,7 +379,7 @@ a single string literal."
   (defun mole-build-zero-or-one (productions)
     "Return a form that evaluates to zero or one PRODUCTIONS instances."
     (let ((res (make-symbol "res")))
-      `(mole-node '\? (mole-parse-match (,(mole-build-sequence productions) ,res)
+      `(mole-node '\? (mole-parse-match (,res ,(mole-build-sequence productions))
                         ,res nil)
                   ,mole-build-fusing)))
 
@@ -387,19 +387,19 @@ a single string literal."
     "Return a form for evaluating a disjunction between productions."
     (let ((child (make-symbol "child")))
       `(or ,@(mapcar (lambda (prod)
-                       `(mole-parse-match (,(mole-build-element prod) ,child)
+                       `(mole-parse-match (,child ,(mole-build-element prod))
                           ,child nil))
                      productions)
            'fail)))
 
   (defun mole-build-lookahead (productions)
     "Return a form for evaluating PRODUCTIONS in `save-excursion'."
-    `(mole-parse-match ((save-excursion ,(mole-build-sequence productions)) _)
+    `(mole-parse-match (_ (save-excursion ,(mole-build-sequence productions)))
        (mole-node-literal (point) (point)) 'fail))
 
   (defun mole-build-negative-lookahead (productions)
     "Return a form for evaluating (not PRODUCTION-FORM) in `save-excursion'."
-    `(mole-parse-match ((save-excursion ,(mole-build-sequence productions)) _)
+    `(mole-parse-match (_ (save-excursion ,(mole-build-sequence productions)))
        'fail (mole-node-literal (point) (point))))
 
   (defun mole-build-repetition (productions)
@@ -427,7 +427,7 @@ a single string literal."
     "Return a form for evaluation PRODUCTIONS, but in a lexical environment."
     (let ((res (make-symbol "res")))
       `(let ((mole-runtime-force-lexical t))
-         (mole-parse-match (,(mole-build-sequence productions) ,res)
+         (mole-parse-match (,res ,(mole-build-sequence productions))
            (mole-node 'lexical ,res ,mole-build-fusing)))))
 
   (defun mole-build-char (sets)
@@ -455,7 +455,7 @@ a single string literal."
     (cl-assert (symbolp key))
     (let ((res (make-symbol "res")))
       `(let ((mole-runtime-context (mole-context-set mole-runtime-context ',key ,value)))
-         (mole-parse-match (,(mole-build-sequence productions) ,res)
+         (mole-parse-match (,res ,(mole-build-sequence productions))
            (mole-node 'with-context ,res ,mole-build-fusing)
            'fail))))
 
@@ -464,7 +464,7 @@ a single string literal."
     (cl-assert (symbolp key))
     (let ((res (make-symbol "res")))
       `(if (eq ,value (mole-context-get mole-runtime-context ',key))
-           (mole-parse-match (,(mole-build-sequence productions) ,res)
+           (mole-parse-match (,res ,(mole-build-sequence productions))
              (mole-node 'if-context ,res ,mole-build-fusing)
              'fail)
          'fail)))
