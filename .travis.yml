@@ -22,7 +22,7 @@
 # SOFTWARE.
 
 language: emacs-lisp
-sudo: false
+sudo: required
 cache:
   - directories:
       # Cache stable Emacs binaries (saves 1min per job)
