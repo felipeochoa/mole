@@ -234,7 +234,7 @@ defaults to simply returning 'fail."
 (defmacro mole-parse-anonymous-literal (string lexical)
   "Return a literal-parsing form for STRING.
 STRING is the string to parse, LEXICAL is t if whitespace should
-never be chomped.  (This second arg is used so that
+never be chomped.  (This second arg is used so that function
 `mole-build-lexical' can be eagerly evaluated at build time.)"
   (declare (indent defun) (debug (stringp (or "t" "nil"))))
   (if (= 1 (length string))
