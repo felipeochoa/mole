@@ -35,7 +35,7 @@
 (ert-deftest mole-build-production-name ()
   "Ensure that `mole-build-production' assigns the correct name
   to the production."
-  (let* ((productions '((p1 nil ("p1")) (p2 (:lexical t) ("a" "b")) (p3 nil (a b c))))
+  (let* ((productions '((mole~p1 nil ("p1")) (mole~p2 (:lexical t) ("a" "b")) (mole~p3 nil (p1 p2 p3))))
          (mole-build-prod-nums (mole-make-prod-num-table (mapcar 'car productions))))
     (dolist (prod productions)
       (should (eq (car prod)
@@ -236,6 +236,11 @@ NUM PRODUCTION: appease flycheck."
   (let ((err (should-error (eval `(mole-create-grammar (x "x") (x "y")) t))))
     (should (string-match-p "duplicate" (cadr err)))))
 
+(ert-deftest mole-unknown-prod-test ()
+  "Ensure calling unknown productions fails at creation time."
+  (let ((err (should-error (eval `(mole-create-grammar (x "x") (y "y" z)) t))))
+    (should (string-match-p "defined" (cadr err)))))
+
 (ert-deftest mole-grammar-varying-defaults ()
   "Test a grammar with various defaults plists"
   (let ((g (eval `(mole-create-grammar
@@ -285,11 +290,12 @@ NUM PRODUCTION: appease flycheck."
 (ert-deftest mole-choice-highwatermark-choice ()
   "Ensure the highwater marks are set correctly in choice parsing."
   (eval
-   (let ((mole-build-prod-nums (mole-make-prod-num-table '(whitespace a b choice))))
+   (let ((mole-build-prod-nums (mole-make-prod-num-table (mapcar #'mole-munge-production-name
+                                                                 '(whitespace a b choice)))))
      `(let* ((mole~whitespace (lambda () nil))
-             (mole~a (lambda ,@(cdr (mole-build-production '(a () ("x" "x" (+ "b") "a" "a"))))))
-             (mole~b (lambda ,@(cdr (mole-build-production '(b () ("xxb"))))))
-             (choice (lambda ,@(cdr (mole-build-production '(choice () ((or a b))))))))
+             (mole~a (lambda ,@(cdr (mole-build-production '(mole~a () ("x" "x" (+ "b") "a" "a"))))))
+             (mole~b (lambda ,@(cdr (mole-build-production '(mole~b () ("xxb"))))))
+             (choice (lambda ,@(cdr (mole-build-production '(mole~choice () ((or a b))))))))
         (with-temp-buffer
           (insert "xxbba")
           (let ((mole-runtime-highwater-mark 0)

@@ -90,6 +90,9 @@ contents.")
 (defvar mole-build-prod-nums nil
   "Build-time hashtable mapping production names to their numeric codes.")
 
+(defvar mole-build-params nil
+  "List containing the parameters of the production that is being built.")
+
 (cl-defstruct mole-grammar productions)
 
 (cl-defstruct mole-node name children pos end)
@@ -284,7 +287,7 @@ never be chomped.  (This second arg is used so that function
     "Return a (name args body) list for SPEC."
     (cl-destructuring-bind (name props args) spec
       (let* ((children (make-symbol "children"))
-             (params (mapcar #'mole-munge-production-name (plist-get props :params)))
+             (mole-build-params (mapcar #'mole-munge-production-name (plist-get props :params)))
              (mole-build-lexical (plist-get props :lexical))
              (mole-build-fusing (plist-get props :fuse))
              (body `(mole-parse-match (,children ,(mole-build-sequence args))
@@ -296,14 +299,19 @@ never be chomped.  (This second arg is used so that function
                         (prog1 ,body
                           ;; Need to chomp again in case final production is lexical
                           (mole-chomp-whitespace)))))
-        (unless params
+        (unless mole-build-params
           (setq body `(mole-cached-result ,(gethash name mole-build-prod-nums) ,body)))
-        (list name params body))))
+        (list name mole-build-params body))))
 
   (defun mole-build-element (production)
     "Compile PRODUCTION into recursive calls."
     (cond
-     ((symbolp production) `(funcall ,(mole-munge-production-name production)))
+     ((symbolp production)
+      (setq production (mole-munge-production-name production))
+      (unless (or (gethash production mole-build-prod-nums)
+                  (memq production mole-build-params))
+        (error "Production %s is not defined" production))
+      `(funcall ,production))
      ((stringp production) `(mole-parse-anonymous-literal ,production ,mole-build-lexical))
      ((consp production)
       (pcase (car production)
