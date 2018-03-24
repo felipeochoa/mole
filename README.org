@@ -7,4 +7,4 @@
   languages can easily be generated
 
 * License
-  This project is licensed under the MIT license.
+  This project is licensed under the GPLv3 license.
