@@ -113,7 +113,7 @@ first child and END defaults to the END of the last child.
 
 If NAME indicates that the node should be an operator, a
 `mole-node-operator' is created instead."
-  (declare (debug (("quote" symbolp) form &optional form)))
+  (declare (debug (("quote" symbolp) form form &optional form form)))
   (cl-assert (and (consp name) (eq 'quote (car name))
                   (symbolp (setq name (cadr name)))))
   (setq fuse (eval fuse))
@@ -174,7 +174,7 @@ started and ended."
 RES-SYM is bound to the result of FORM.  If FORM is a successful
 parse, execute ON-SUCCESS.  Otherwise execute ON-FAIL. ON-FAIL
 defaults to simply returning 'fail."
-  (declare (debug ((form symbolp) form &optional form)) (indent 1))
+  (declare (debug ((symbolp form) form &optional form)) (indent 1))
   `(let ((,res-sym ,form))
      (if (mole-parse-success-p ,res-sym)
          ,on-success
@@ -236,7 +236,7 @@ defaults to simply returning 'fail."
 STRING is the string to parse, LEXICAL is t if whitespace should
 never be chomped.  (This second arg is used so that function
 `mole-build-lexical' can be eagerly evaluated at build time.)"
-  (declare (indent defun) (debug (stringp (or "t" "nil"))))
+  (declare (indent defun) (debug (stringp &or "t" "nil")))
   (if (= 1 (length string))
       `(if (eq (char-after) ,(aref string 0))
            (prog1 (mole-node-literal (point) (1+ (point)))
@@ -394,12 +394,12 @@ a single string literal."
 
   (defun mole-build-lookahead (productions)
     "Return a form for evaluating PRODUCTIONS in `save-excursion'."
-    `(mole-parse-match (_ (save-excursion ,(mole-build-sequence productions)))
+    `(mole-parse-match (res (save-excursion ,(mole-build-sequence productions)))
        (mole-node-literal (point) (point)) 'fail))
 
   (defun mole-build-negative-lookahead (productions)
     "Return a form for evaluating (not PRODUCTION-FORM) in `save-excursion'."
-    `(mole-parse-match (_ (save-excursion ,(mole-build-sequence productions)))
+    `(mole-parse-match (res (save-excursion ,(mole-build-sequence productions)))
        'fail (mole-node-literal (point) (point))))
 
   (defun mole-build-repetition (productions)
