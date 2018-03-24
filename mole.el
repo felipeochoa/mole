@@ -217,7 +217,8 @@ defaults to simply returning 'fail."
   (cl-assert (numberp prod-num))
   (let ((res (make-symbol "res")) (beg (make-symbol "beg")))
     `(if-let (,res (mole-cache-get mole-runtime-cache (point) ,prod-num mole-runtime-context))
-         (progn (when (mole-parse-success-p ,res) (goto-char (mole-node-end (car ,res))))
+         (progn (when (mole-parse-success-p (car ,res))
+                  (goto-char (mole-node-end (car ,res))))
                 (mole-update-highwater-mark (cdr ,res))
                 (car ,res))
        (mole-with-fresh-highwater-mark

@@ -314,6 +314,21 @@ NUM PRODUCTION: appease flycheck."
       (should (= 1 extern-fn-call-count)))
    t))
 
+(ert-deftest mole-cached-parse-fail ()
+  "Ensure that parsing uses the cache even when the result is fail."
+  (eval
+   `(let* ((extern-fn-call-count 0)
+           (extern-fn (lambda () (cl-incf extern-fn-call-count)
+                        (make-mole-node-literal :pos (point) :end (point))))
+           (g (mole-create-grammar
+               (a e "a")
+               (b (or (: a "x") (: a "y") "b"))
+               (e (extern extern-fn)))))
+
+      (should (equal '(b "b") (mole-node-to-sexp (mole-parse-string g 'b "b"))))
+      (should (= 1 extern-fn-call-count)))
+   t))
+
 (ert-deftest mole-cached-parse-with-context ()
   (eval
    `(let* ((extern-fn-call-count 0)
