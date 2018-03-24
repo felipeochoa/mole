@@ -574,6 +574,8 @@ parametric production (one defined with `:params')."
   (cl-callf mole-munge-productions productions)
   (unless (plist-get (cadr (assq 'mole~whitespace productions)) :lexical)
     (error "`whitespace' production must be lexical"))
+  (let ((dups (mole-get-duplicates (mapcar #'car productions))))
+    (when dups (error "Duplicate production definitions: %S" dups)))
   (let ((mole-build-prod-nums (mole-make-prod-num-table (mapcar 'car productions))))
     `(let (,@(mapcar 'car productions))
        ,@(mapcar (lambda (spec)
@@ -583,6 +585,15 @@ parametric production (one defined with `:params')."
        (make-mole-grammar :productions (list ,@(mapcar (lambda (term)
                                                          `(cons ',(car term) ,(car term)))
                                                        productions))))))
+
+(defun mole-get-duplicates (list)
+  "Return a list of unique items in LIST that appear more than once."
+  (let (elt res)
+    (while list
+      (setq elt (car list) list (cdr list))
+      (when (and (memq elt list) (not (memq elt res)))
+        (push elt res)))
+    (nreverse res)))
 
 (defun mole-munge-production-name (prod)
   "Munge symbol PROD so that it does not conflict with existing variables.

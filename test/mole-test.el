@@ -231,6 +231,11 @@ NUM PRODUCTION: appease flycheck."
                      "+"
                      (product (number "22") "*" (number "6")))))))
 
+(ert-deftest mole-duplicate-prods-test ()
+  "Ensure duplicate productions are flagged at creation time."
+  (let ((err (should-error (eval `(mole-create-grammar (x "x") (x "y")) t))))
+    (should (string-match-p "duplicate" (cadr err)))))
+
 (ert-deftest mole-grammar-varying-defaults ()
   "Test a grammar with various defaults plists"
   (let ((g (eval `(mole-create-grammar
