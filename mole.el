@@ -494,6 +494,7 @@ a single string literal."
                            ((functionp p) `,p)
                            ((and (symbolp p) (gethash p mole-build-prod-nums)) `,p)
                            ((and (symbolp p) (memq p mole-build-params)) `,p)
+                           ((eq (car-safe p) 'quote) p)
                            (t `(lambda () ,(mole-build-element p)))))
                         productions))))
 

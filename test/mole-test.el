@@ -208,6 +208,16 @@ NUM PRODUCTION: appease flycheck."
                               (p :params (x) x))
   ("a" "b") ("" "x"))
 
+(mole-define-production-test ((quoted-parametric (with-params (quote "abcd") (quote 123) 'abc))
+                              (with-params :params (x y z)
+                                           (extern (lambda (a1 a2 a3)
+                                                     (should (string= a1 "abcd"))
+                                                     (should (eq a2 123))
+                                                     (should (eq a3 'abc))
+                                                     'fail)
+                                                   x y z)))
+  () (""))
+
 (ert-deftest mole-fuse-production ()
   "Ensure fusing productions join their children."
   (let* ((g (eval `(mole-create-grammar
