@@ -93,6 +93,17 @@ contents.")
 (defvar mole-build-params nil
   "List containing the parameters of the production that is being built.")
 
+(defvar mole-build-with-debug nil
+  "If t, emit debugging helpers.")
+
+(defvar mole-debug-call-stack nil
+  "Runtime stack containing the named productions called.")
+
+(defmacro mole-debug (&rest forms)
+  "If `mole-build-with-debug' emit FORMS, otherwise emit nil."
+  (declare (debug (&rest form)) (indent defun))
+  (when mole-build-with-debug `(progn ,@forms)))
+
 (cl-defstruct mole-grammar productions)
 
 (cl-defstruct mole-node name children pos end)
@@ -301,6 +312,11 @@ never be chomped.  (This second arg is used so that function
                           (mole-chomp-whitespace)))))
         (unless mole-build-params
           (setq body `(mole-cached-result ,(gethash name mole-build-prod-nums) ,body)))
+        (when mole-build-with-debug
+          (setq body `(prog2
+                          (push ',(mole-unmunge-production-name name) mole-debug-call-stack)
+                          ,body
+                        (pop mole-debug-call-stack))))
         (list name mole-build-params body))))
 
   (defun mole-build-element (production)
@@ -637,6 +653,7 @@ can ensue."
 
 (defun mole-parse (grammar production)
   "Attempt to parse GRAMMAR's PRODUCTION starting at point."
+  (setq mole-debug-call-stack nil)
   (setq mole-runtime-string-parse nil)
   (save-excursion
     (let ((mole-runtime-highwater-mark (point))

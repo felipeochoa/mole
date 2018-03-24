@@ -218,6 +218,23 @@ NUM PRODUCTION: appease flycheck."
                                                    x y z)))
   () (""))
 
+(ert-deftest mole-test-debug-call-stack ()
+  "Ensure that when debugging the call stack is set correctly."
+  (let (grammar)
+    (let ((mole-build-with-debug t))
+      (setq grammar (eval `(mole-create-grammar
+                            (p1 p2)
+                            (p2 p3 p4)
+                            (p3 p5)
+                            (p4 (extern (lambda ()
+                                          (should (equal mole-debug-call-stack '(p4 p2 p1)))
+                                          'fail)))
+                            (p5 (extern (lambda ()
+                                          (should (equal mole-debug-call-stack '(p5 p3 p2 p1)))
+                                          'fail))))
+                          t)))
+    (mole-parse-string grammar 'p1 "")))
+
 (ert-deftest mole-fuse-production ()
   "Ensure fusing productions join their children."
   (let* ((g (eval `(mole-create-grammar
