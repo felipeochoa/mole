@@ -489,9 +489,13 @@ a single string literal."
   (cl-defun mole-build-parametric-call ((prod &rest productions))
     "Build a parametric application of PROD with PRODUCTIONS as arguments."
     `(funcall ,(mole-munge-production-name prod)
-              ,@(mapcar (lambda (p) `(lambda () ,(mole-build-element p)))
-                              productions)))
-  )
+              ,@(mapcar (lambda (p)
+                          (cond
+                           ((functionp p) `,p)
+                           ((and (symbolp p) (gethash p mole-build-prod-nums)) `,p)
+                           ((and (symbolp p) (memq p mole-build-params)) `,p)
+                           (t `(lambda () ,(mole-build-element p)))))
+                        productions))))
 
 (defmacro mole-create-grammar (&rest productions)
   "Create a new grammar object with PRODUCTIONS.

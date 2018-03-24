@@ -188,6 +188,22 @@ NUM PRODUCTION: appease flycheck."
                               (with-params :params (x y) (+ x) (2 y)))
   ("abbccccdd") ("" "abb" "cdd"))
 
+(mole-define-production-test ((parametric-prod (with-params a b))
+                              (a "a")
+                              (b "b")
+                              (with-params :params (x y) (+ x) (2 y)))
+  ("aaabb" "abb") (""))
+
+(mole-define-production-test ((parametric-recursive (with-params "a"))
+                              (with-params :params (x) (with-params-2 x))
+                              (with-params-2 :params (y) (+ y)))
+  ("a" "aaaa") (""))
+
+(mole-define-production-test ((parametric-nested (with-params-2 (with-params "a")))
+                              (with-params :params (x) (+ x))
+                              (with-params-2 :params (y) y "x"))
+  ("ax" "aaaax") ("" "x"))
+
 (mole-define-production-test ((non-caching-parametric (or (p "a") (p "b")))
                               (p :params (x) x))
   ("a" "b") ("" "x"))
