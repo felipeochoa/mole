@@ -138,7 +138,7 @@ started and ended."
 
 (cl-defmethod mole-node-to-sexp ((node mole-node))
   "Convert NODE into a test-friendly sexp."
-  (cons (mole-node-name node)
+  (cons (mole-unmunge-production-name (mole-node-name node))
         (cl-mapcan (lambda (child)
                      (if (mole-node-operator-p child)
                          (mole-node-to-sexp child)
@@ -229,7 +229,7 @@ defaults to simply returning 'fail."
 (defmacro mole-chomp-whitespace ()
   "Chomp whitespace unless `mole-runtime-force-lexical' is t."
   `(or mole-runtime-force-lexical
-       (mole-ignore-hw-mark (funcall whitespace))))
+       (mole-ignore-hw-mark (funcall mole~whitespace))))
 
 (defmacro mole-parse-anonymous-literal (string lexical)
   "Return a literal-parsing form for STRING.
@@ -283,7 +283,7 @@ never be chomped.  (This second arg is used so that function
     "Return a (name args body) list for SPEC."
     (cl-destructuring-bind (name props args) spec
       (let* ((children (make-symbol "children"))
-             (params (plist-get props :params))
+             (params (mapcar #'mole-munge-production-name (plist-get props :params)))
              (mole-build-lexical (plist-get props :lexical))
              (mole-build-fusing (plist-get props :fuse))
              (body `(mole-parse-match (,children ,(mole-build-sequence args))
@@ -302,7 +302,7 @@ never be chomped.  (This second arg is used so that function
   (defun mole-build-element (production)
     "Compile PRODUCTION into recursive calls."
     (cond
-     ((symbolp production) `(funcall ,production))
+     ((symbolp production) `(funcall ,(mole-munge-production-name production)))
      ((stringp production) `(mole-parse-anonymous-literal ,production ,mole-build-lexical))
      ((consp production)
       (pcase (car production)
@@ -471,11 +471,16 @@ a single string literal."
 
   (cl-defun mole-build-extern ((fn &rest args))
     "Build a custom matcher calling FN with ARGS."
-    `(apply ,fn (list ,@args)))
+    `(apply ,fn (list ,@(mapcar (lambda (arg)
+                                  (if (symbolp arg)
+                                      (mole-munge-production-name arg)
+                                    arg))
+                                args))))
 
   (cl-defun mole-build-parametric-call ((prod &rest productions))
     "Build a parametric application of PROD with PRODUCTIONS as arguments."
-    `(funcall ,prod ,@(mapcar (lambda (p) `(lambda () ,(mole-build-element p)))
+    `(funcall ,(mole-munge-production-name prod)
+              ,@(mapcar (lambda (p) `(lambda () ,(mole-build-element p)))
                               productions)))
   )
 
@@ -566,7 +571,7 @@ parametric production (one defined with `:params')."
   (unless (assq 'whitespace productions)
     (push mole-default-whitespace-terminal productions))
   (cl-callf mole-munge-productions productions)
-  (unless (plist-get (cadr (assq 'whitespace productions)) :lexical)
+  (unless (plist-get (cadr (assq 'mole~whitespace productions)) :lexical)
     (error "`whitespace' production must be lexical"))
   (let ((mole-build-prod-nums (mole-make-prod-num-table (mapcar 'car productions))))
     `(let (,@(mapcar 'car productions))
@@ -578,6 +583,17 @@ parametric production (one defined with `:params')."
                                                          `(cons ',(car term) ,(car term)))
                                                        productions))))))
 
+(defun mole-munge-production-name (prod)
+  "Munge symbol PROD so that it does not conflict with existing variables.
+Mole grammars let-bind productions, so if production names
+conflict with dynamically bound symbols (e.g., debugger), trouble
+can ensue."
+  (intern (concat "mole~" (symbol-name prod))))
+
+(defun mole-unmunge-production-name (munged)
+  "Inverse of `mole-munge-production-name' applied to MUNGED."
+  (intern (substring (symbol-name munged) 5)))
+
 (defun mole-munge-productions (productions)
   "Munge PRODUCTIONS from the user-friendly format into a list of specs."
   (let ((defaults mole-default-props) prods)
@@ -588,7 +604,7 @@ parametric production (one defined with `:params')."
             (push kw defaults))
         (let* ((prod (pop productions))
                (arg-spec (mole-split-spec-args (cdr prod))))
-          (push (list (car prod) ; name
+          (push (list (mole-munge-production-name (car prod)) ; name
                       (nconc (car arg-spec) defaults) ; props
                       (cdr arg-spec)) ; spec
                 prods))))
@@ -601,7 +617,8 @@ parametric production (one defined with `:params')."
     (let ((mole-runtime-highwater-mark (point))
           (mole-runtime-cache
            (mole-cache (length (mole-grammar-productions grammar)) #'mole-context-compare)))
-     (if-let ((parser (assq production (mole-grammar-productions grammar))))
+     (if-let ((parser (assq (mole-munge-production-name production)
+                            (mole-grammar-productions grammar))))
         (funcall (cdr parser))
       (error "Production %S not defined in grammar" production)))))
 

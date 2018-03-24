@@ -18,6 +18,20 @@
 (load (f-expand "mole-cache" (f-parent (f-dirname (f-this-file)))))
 (load (f-expand "mole-context" (f-parent (f-dirname (f-this-file)))))
 
+
+;; Test the helpers
+(ert-deftest mole-name-munging ()
+  "Ensure the symbol munging functions work correctly"
+  (let ((cases '(abcd debugger mole-runtime-force-lexical)) munged)
+    (dolist (case cases)
+      (setq munged (mole-munge-production-name case))
+      (cl-assert (not (eq munged case)))
+      (cl-assert (eq case (mole-unmunge-production-name munged))))))
+
+
+
+;; Test productions
+
 (ert-deftest mole-build-production-name ()
   "Ensure that `mole-build-production' assigns the correct name
   to the production."
@@ -43,7 +57,8 @@ FAILURES is a list of strings that NAME should not parse."
                                               successes)))
   (cl-assert (and (listp failures) (cl-every 'stringp failures)))
   (let* ((firstname (caar productions))
-         (fullname (intern (format "mole-builders-%s" firstname))))
+         (fullname (intern (format "mole-builders-%s" firstname)))
+         (munged (mole-munge-production-name firstname)))
     (unless (assq 'whitespace productions)
       (push mole-default-whitespace-terminal productions))
     (cl-callf mole-munge-productions productions)
@@ -63,13 +78,13 @@ FAILURES is a list of strings that NAME should not parse."
                   (setq succ (cons succ (1+ (length succ)))))
                 (erase-buffer) (insert (car succ)) (goto-char (point-min))
                 (setq mole-runtime-cache (make-mole-cache :num-prods ,(length productions)))
-                (should (mole-parse-success-p (funcall ,firstname)))
+                (should (mole-parse-success-p (funcall ,munged)))
                 (should (eq (point) (cdr succ))))
              ,(when failures
                 `'(dolist (f ',failures)
                     (erase-buffer) (insert f) (goto-char (point-min))
                     (setq mole-runtime-cache (make-mole-cache :num-prods ,(length productions)))
-                    (should (null (mole-parse-success-p (funcall ,firstname))))
+                    (should (null (mole-parse-success-p (funcall ,munged))))
                     (should (bobp))))))
           t)))))
 
@@ -243,7 +258,7 @@ NUM PRODUCTION: appease flycheck."
   "Test that literals set the highwater mark correctly."
   (eval
    (let ((mole-build-prod-nums (mole-make-prod-num-table '(a whitespace))))
-     `(let* ((whitespace (lambda () nil))
+     `(let* ((mole~whitespace (lambda () nil))
              (a (lambda ,@(cdr (mole-build-production '(a () ("abc" (char (?d . ?f)))))))))
         (with-temp-buffer
           (dolist (fixture '(("abcd" . 4)
@@ -266,9 +281,9 @@ NUM PRODUCTION: appease flycheck."
   "Ensure the highwater marks are set correctly in choice parsing."
   (eval
    (let ((mole-build-prod-nums (mole-make-prod-num-table '(whitespace a b choice))))
-     `(let* ((whitespace (lambda () nil))
-             (a (lambda ,@(cdr (mole-build-production '(a () ("x" "x" (+ "b") "a" "a"))))))
-             (b (lambda ,@(cdr (mole-build-production '(b () ("xxb"))))))
+     `(let* ((mole~whitespace (lambda () nil))
+             (mole~a (lambda ,@(cdr (mole-build-production '(a () ("x" "x" (+ "b") "a" "a"))))))
+             (mole~b (lambda ,@(cdr (mole-build-production '(b () ("xxb"))))))
              (choice (lambda ,@(cdr (mole-build-production '(choice () ((or a b))))))))
         (with-temp-buffer
           (insert "xxbba")
@@ -280,7 +295,7 @@ NUM PRODUCTION: appease flycheck."
           (let ((mole-runtime-highwater-mark 0)
                 (mole-runtime-cache (make-mole-cache :num-prods 4)))
             (goto-char (point-min))
-            (funcall b)
+            (funcall mole~b)
             (should (= 3 mole-runtime-highwater-mark))))))))
 
 (ert-deftest mole-cached-parse ()
