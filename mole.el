@@ -127,6 +127,10 @@ contents.")
 (cl-defstruct (mole-node-literal (:include mole-node))
   "Node class for anonymous literals.") ;; just ignore name and children
 
+(defsubst mole-node-clean-name (node)
+  "Return NODE's name after unmunging."
+  (mole-unmunge-production-name (mole-node-name node)))
+
 (defmacro mole-node (name children fuse &optional pos end)
   "Construct a `mole-node' instance named NAME with CHILDREN.
 If FUSE is t (evaluated at compile-time) and NAME indicates an

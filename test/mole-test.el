@@ -51,6 +51,12 @@
       (should-not (eq munged case))
       (should (eq case (mole-unmunge-production-name munged))))))
 
+(ert-deftest mole-node-clean-name ()
+  "Test the unmunging of node names."
+  (let ((node (make-mole-node :name (mole-munge-production-name 'abcd))))
+    (should (eq (mole-node-clean-name node) 'abcd))))
+
+
 
 ;; Test productions
 
