@@ -510,11 +510,11 @@ PRODUCTIONS are the individual productions to match."
 
 (cl-defun mole-build-extern ((fn &rest args))
   "Build a custom matcher calling FN with ARGS."
-  `(apply ,fn (list ,@(mapcar (lambda (arg)
-                                (if (symbolp arg)
-                                    (mole-munge-production-name arg)
-                                  arg))
-                              args))))
+  `(funcall ,fn ,@(mapcar (lambda (arg)
+                            (if (symbolp arg)
+                                (mole-munge-production-name arg)
+                              arg))
+                          args)))
 
 (cl-defun mole-build-parametric-call ((prod &rest productions))
   "Build a parametric application of PROD with PRODUCTIONS as arguments."
