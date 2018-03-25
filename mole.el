@@ -386,7 +386,8 @@ a single string literal."
                           productions))))))))
 
   (defun mole-build-sequence-operator (productions)
-    "Like `mole-build-sequence', but returning a `mole-node-operator'."
+    "Like `mole-build-sequence', but returning a `mole-node-operator'.
+PRODUCTIONS are the individual productions to match."
     (let ((res (make-symbol "res")))
       `(mole-parse-match (,res ,(mole-build-sequence productions))
          (mole-node ': ,res ,mole-build-fusing)
@@ -422,7 +423,7 @@ a single string literal."
                   ,mole-build-fusing)))
 
   (defun mole-build-or (productions)
-    "Return a form for evaluating a disjunction between productions."
+    "Return a form for evaluating a disjunction between PRODUCTIONS."
     (let ((child (make-symbol "child")))
       `(or ,@(mapcar (lambda (prod)
                        `(mole-parse-match (,child ,(mole-build-element prod))
@@ -436,7 +437,7 @@ a single string literal."
        (mole-node-literal (point) (point)) 'fail))
 
   (defun mole-build-negative-lookahead (productions)
-    "Return a form for evaluating (not PRODUCTION-FORM) in `save-excursion'."
+    "Return a form for evaluating (not PRODUCTIONS) in `save-excursion'."
     `(mole-parse-match (res (save-excursion ,(mole-build-sequence productions)))
        'fail (mole-node-literal (point) (point))))
 
@@ -689,3 +690,7 @@ can ensue."
 (provide 'mole)
 
 ;;; mole.el ends here
+
+;; Local Variables:
+;; checkdoc-verb-check-experimental-flag: nil
+;; End:
