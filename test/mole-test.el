@@ -56,6 +56,30 @@
   (let ((node (make-mole-node :name (mole-munge-production-name 'abcd))))
     (should (eq (mole-node-clean-name node) 'abcd))))
 
+(ert-deftest mole-node-visit ()
+  "Test the visiting of nodes."
+  (eval
+   `(let* ((grammar (mole-create-grammar
+                     (x "x")
+                     (y (\? "y"))
+                     (z (+ "z"))
+                     (xyz (or (: x y z) (: x y) x))))
+           (ast (mole-parse-string grammar 'xyz "xyzzz"))
+           visits)
+      (mole-visit ast (lambda (node end-p)
+                        (push (cons (mole-node-clean-name node) end-p) visits)))
+      (cl-callf nreverse visits)
+      (should (equal (mole-node-to-sexp ast)
+                     '(xyz (x "x") (y "y") (z "z" "z" "z"))))
+      (should (equal visits '((xyz . nil)
+                              (x . nil)
+                              (x . t)
+                              (y . nil)
+                              (y . t)
+                              (z . nil)
+                              (z . t)
+                              (xyz . t)))))
+   t))
 
 
 ;; Test productions

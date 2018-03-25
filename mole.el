@@ -196,6 +196,25 @@ started and ended."
                  (list (mole-node-to-sexp child))))
              (mole-node-children op)))
 
+(cl-defmethod mole-visit ((node mole-node) fn)
+  "Walk NODE's descendants and call FN on them.
+FN is called twice with two arguments for each node. The first
+time it's called with (DESCENDANT nil), before that node's
+descendants are visited. The second time FN is called
+with (DESCENDANT t), after that node's descendants are visited."
+  (funcall fn node nil)
+  (dolist (child (mole-node-children node))
+    (mole-visit child fn))
+  (funcall fn node t))
+
+(cl-defmethod mole-visit ((node mole-node-operator) fn)
+  "Visit NODE and NODE's descendants."
+  (dolist (child (mole-node-children node))
+    (mole-visit child fn)))
+
+(cl-defmethod mole-visit ((_ mole-node-literal) _fn) "Noop.")
+(cl-defmethod mole-visit ((_ (eql fail)) _fn) "Noop.")
+
 (defun mole-parse-success-p (result)
   "Return t if RESULT indicates a successful parse."
   (not (eq result 'fail)))
