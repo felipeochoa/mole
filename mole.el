@@ -466,7 +466,8 @@ a single string literal."
     (let ((res (make-symbol "res")))
       `(let ((mole-runtime-force-lexical t))
          (mole-parse-match (,res ,(mole-build-sequence productions))
-           (mole-node 'lexical ,res ,mole-build-fusing)))))
+           (mole-node 'lexical ,res ,mole-build-fusing)
+           'fail))))
 
   (defun mole-build-char (sets)
     "Return a form for matching SETS of characters, like using char in `rx'."

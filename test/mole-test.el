@@ -207,6 +207,10 @@ NUM PRODUCTION: appease flycheck."
                               (non-lexical "a"))
   ("aa| a a") ("a a| a a"))
 
+(mole-define-production-test ((force-failing-lexical (or lexi "abcd"))
+                              (lexi (lexical "x" "y" "z")))
+  ("abcd"))
+
 (mole-define-production-test ((parametric (with-params "a" "b") (with-params "c" "d"))
                               (with-params :params (x y) (+ x) (2 y)))
   ("abbccccdd") ("" "abb" "cdd"))
