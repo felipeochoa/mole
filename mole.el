@@ -286,248 +286,247 @@ never be chomped.  (This second arg is used so that function
              (mole-update-highwater-mark (point))
              'fail))))))
 
-(eval-and-compile
-  (defun mole-split-spec-args (spec)
-    "Split out config keys from SPEC."
-    (setq spec (append spec nil))
-    (let ((config spec) tail)
-      (while (memq (car spec) mole-production-keys)
-        (setq tail (cdr spec)
-              spec (cddr spec)))
-      (if (eq spec config)
-          (cons nil spec)
-        (setcdr tail nil)
-        (cons config spec))))
+(defun mole-split-spec-args (spec)
+  "Split out config keys from SPEC."
+  (setq spec (append spec nil))
+  (let ((config spec) tail)
+    (while (memq (car spec) mole-production-keys)
+      (setq tail (cdr spec)
+            spec (cddr spec)))
+    (if (eq spec config)
+        (cons nil spec)
+      (setcdr tail nil)
+      (cons config spec))))
 
-  (defun mole-make-prod-num-table (productions)
-    "Create a hashtable for `mole-build-prod-nums' from PRODUCTIONS."
-    (let ((table (make-hash-table :test 'eq)) (i 0))
-      (dolist (p productions)
-        (puthash p i table)
-        (cl-incf i))
-      table))
+(defun mole-make-prod-num-table (productions)
+  "Create a hashtable for `mole-build-prod-nums' from PRODUCTIONS."
+  (let ((table (make-hash-table :test 'eq)) (i 0))
+    (dolist (p productions)
+      (puthash p i table)
+      (cl-incf i))
+    table))
 
-  (defun mole-build-production (spec)
-    "Return a (name args body) list for SPEC."
-    (cl-destructuring-bind (name props args) spec
-      (let* ((children (make-symbol "children"))
-             (mole-build-params (mapcar #'mole-munge-production-name (plist-get props :params)))
-             (mole-build-lexical (plist-get props :lexical))
-             (mole-build-fusing (plist-get props :fuse))
-             (body `(mole-parse-match (,children ,(mole-build-sequence args))
-                      (mole-node ',name ,children ,mole-build-fusing)
-                      'fail)))
-        (unless mole-build-lexical
-          (setq body `(mole-maybe-save-excursion
-                        (mole-chomp-whitespace)
-                        (prog1 ,body
-                          ;; Need to chomp again in case final production is lexical
-                          (mole-chomp-whitespace)))))
-        (unless mole-build-params
-          (setq body `(mole-cached-result ,(gethash name mole-build-prod-nums) ,body)))
-        (when mole-build-with-debug
-          (setq body `(prog2
-                          (push ',(mole-unmunge-production-name name) mole-debug-call-stack)
-                          ,body
-                        (pop mole-debug-call-stack))))
-        (list name mole-build-params body))))
+(defun mole-build-production (spec)
+  "Return a (name args body) list for SPEC."
+  (cl-destructuring-bind (name props args) spec
+    (let* ((children (make-symbol "children"))
+           (mole-build-params (mapcar #'mole-munge-production-name (plist-get props :params)))
+           (mole-build-lexical (plist-get props :lexical))
+           (mole-build-fusing (plist-get props :fuse))
+           (body `(mole-parse-match (,children ,(mole-build-sequence args))
+                    (mole-node ',name ,children ,mole-build-fusing)
+                    'fail)))
+      (unless mole-build-lexical
+        (setq body `(mole-maybe-save-excursion
+                      (mole-chomp-whitespace)
+                      (prog1 ,body
+                        ;; Need to chomp again in case final production is lexical
+                        (mole-chomp-whitespace)))))
+      (unless mole-build-params
+        (setq body `(mole-cached-result ,(gethash name mole-build-prod-nums) ,body)))
+      (when mole-build-with-debug
+        (setq body `(prog2
+                        (push ',(mole-unmunge-production-name name) mole-debug-call-stack)
+                        ,body
+                      (pop mole-debug-call-stack))))
+      (list name mole-build-params body))))
 
-  (defun mole-build-element (production)
-    "Compile PRODUCTION into recursive calls."
-    (cond
-     ((symbolp production)
-      (setq production (mole-munge-production-name production))
-      (unless (or (gethash production mole-build-prod-nums)
-                  (memq production mole-build-params))
-        (error "Production %s is not defined" production))
-      `(funcall ,production))
-     ((stringp production) `(mole-parse-anonymous-literal ,production ,mole-build-lexical))
-     ((consp production)
-      (pcase (car production)
-        (': (mole-build-sequence-operator (cdr production)))
-        ('or (mole-build-or (cdr production)))
-        ('* (mole-build-zero-or-more (cdr production)))
-        ('+ (mole-build-one-or-more (cdr production)))
-        ((or '\? 'opt) (mole-build-zero-or-one (cdr production)))
-        ((or '\?= '=) (mole-build-lookahead (cdr production)))
-        ((or '\?! '!) (mole-build-negative-lookahead (cdr production)))
-        ('char (mole-build-char (cdr production)))
-        ('char-not (mole-build-char-not (cdr production)))
-        ('lexical (mole-build-lexical (cdr production)))
-        ('extern (mole-build-extern (cdr production)))
-        ('with-context (mole-build-with-context (cdr production)))
-        ('if-context (mole-build-if-context (cdr production)))
-        ((pred numberp) (mole-build-repetition production))
-        ((pred symbolp) (mole-build-parametric-call production))
-        (_ (error "Unknown production %S" production))))
-     (t (error "Unknown production %S" production))))
+(defun mole-build-element (production)
+  "Compile PRODUCTION into recursive calls."
+  (cond
+   ((symbolp production)
+    (setq production (mole-munge-production-name production))
+    (unless (or (gethash production mole-build-prod-nums)
+                (memq production mole-build-params))
+      (error "Production %s is not defined" production))
+    `(funcall ,production))
+   ((stringp production) `(mole-parse-anonymous-literal ,production ,mole-build-lexical))
+   ((consp production)
+    (pcase (car production)
+      (': (mole-build-sequence-operator (cdr production)))
+      ('or (mole-build-or (cdr production)))
+      ('* (mole-build-zero-or-more (cdr production)))
+      ('+ (mole-build-one-or-more (cdr production)))
+      ((or '\? 'opt) (mole-build-zero-or-one (cdr production)))
+      ((or '\?= '=) (mole-build-lookahead (cdr production)))
+      ((or '\?! '!) (mole-build-negative-lookahead (cdr production)))
+      ('char (mole-build-char (cdr production)))
+      ('char-not (mole-build-char-not (cdr production)))
+      ('lexical (mole-build-lexical (cdr production)))
+      ('extern (mole-build-extern (cdr production)))
+      ('with-context (mole-build-with-context (cdr production)))
+      ('if-context (mole-build-if-context (cdr production)))
+      ((pred numberp) (mole-build-repetition production))
+      ((pred symbolp) (mole-build-parametric-call production))
+      (_ (error "Unknown production %S" production))))
+   (t (error "Unknown production %S" production))))
 
-  (defun mole-build-sequence (productions)
-    "Compile PRODUCTIONS into sequenced calls to each.
+(defun mole-build-sequence (productions)
+  "Compile PRODUCTIONS into sequenced calls to each.
 The resulting form will be a list of `mole-node's and literals;
 one for each item in productions.  If `mole-build-fusing' is
 non-nil, all the descendant nodes are concatenated together into
 a single string literal."
-    (let ((res (make-symbol "res")))
-      (if (null (cdr productions))
-          ;; special-case single item sequences
-          `(mole-parse-match (,res ,(mole-build-element (car productions)))
-             (list ,res)
-             'fail)
-        (let ((block-name (make-symbol "block-name")))
-          ;; ensure if any parse fails, go back to initial point
-          `(mole-maybe-save-excursion
-             (cl-block ,block-name
-               (list
-                ,@(mapcar (lambda (prod)
-                            `(mole-parse-match (,res ,(mole-build-element prod))
-                               ,res
-                               (cl-return-from ,block-name ,res)))
-                          productions))))))))
+  (let ((res (make-symbol "res")))
+    (if (null (cdr productions))
+        ;; special-case single item sequences
+        `(mole-parse-match (,res ,(mole-build-element (car productions)))
+           (list ,res)
+           'fail)
+      (let ((block-name (make-symbol "block-name")))
+        ;; ensure if any parse fails, go back to initial point
+        `(mole-maybe-save-excursion
+           (cl-block ,block-name
+             (list
+              ,@(mapcar (lambda (prod)
+                          `(mole-parse-match (,res ,(mole-build-element prod))
+                             ,res
+                             (cl-return-from ,block-name ,res)))
+                        productions))))))))
 
-  (defun mole-build-sequence-operator (productions)
-    "Like `mole-build-sequence', but returning a `mole-node-operator'.
+(defun mole-build-sequence-operator (productions)
+  "Like `mole-build-sequence', but returning a `mole-node-operator'.
 PRODUCTIONS are the individual productions to match."
-    (let ((res (make-symbol "res")))
-      `(mole-parse-match (,res ,(mole-build-sequence productions))
-         (mole-node ': ,res ,mole-build-fusing)
+  (let ((res (make-symbol "res")))
+    `(mole-parse-match (,res ,(mole-build-sequence productions))
+       (mole-node ': ,res ,mole-build-fusing)
+       'fail)))
+
+(defun mole-build-zero-or-more (productions)
+  "Return a form that evaluates to zero or more PRODUCTIONS instances."
+  (let ((item (make-symbol "item"))
+        (star-items (make-symbol "star-items"))
+        (production-form (mole-build-sequence productions)))
+    `(let (,item ,star-items)
+       (while (mole-parse-success-p (setq ,item ,production-form))
+         (setq ,star-items (nconc ,star-items ,item)))
+       (mole-node '* ,star-items ,mole-build-fusing))))
+
+(defun mole-build-one-or-more (productions)
+  "Return a form that evaluates to one or more PRODUCTIONS instances."
+  (let ((item (make-symbol "item"))
+        (star-items (make-symbol "star-items"))
+        (production-form (mole-build-sequence productions)))
+    `(let (,item ,star-items)
+       (while (mole-parse-success-p (setq ,item ,production-form))
+         (setq ,star-items (nconc ,star-items ,item)))
+       (if ,star-items
+           (mole-node '+ ,star-items ,mole-build-fusing)
+         'fail))))
+
+(defun mole-build-zero-or-one (productions)
+  "Return a form that evaluates to zero or one PRODUCTIONS instances."
+  (let ((res (make-symbol "res")))
+    `(mole-node '\? (mole-parse-match (,res ,(mole-build-sequence productions))
+                      ,res nil)
+                ,mole-build-fusing)))
+
+(defun mole-build-or (productions)
+  "Return a form for evaluating a disjunction between PRODUCTIONS."
+  (let ((child (make-symbol "child")))
+    `(or ,@(mapcar (lambda (prod)
+                     `(mole-parse-match (,child ,(mole-build-element prod))
+                        ,child nil))
+                   productions)
          'fail)))
 
-  (defun mole-build-zero-or-more (productions)
-    "Return a form that evaluates to zero or more PRODUCTIONS instances."
-    (let ((item (make-symbol "item"))
-          (star-items (make-symbol "star-items"))
-          (production-form (mole-build-sequence productions)))
-      `(let (,item ,star-items)
-         (while (mole-parse-success-p (setq ,item ,production-form))
-           (setq ,star-items (nconc ,star-items ,item)))
-         (mole-node '* ,star-items ,mole-build-fusing))))
+(defun mole-build-lookahead (productions)
+  "Return a form for evaluating PRODUCTIONS in `save-excursion'."
+  `(mole-parse-match (res (save-excursion ,(mole-build-sequence productions)))
+     (mole-node-literal (point) (point)) 'fail))
 
-  (defun mole-build-one-or-more (productions)
-    "Return a form that evaluates to one or more PRODUCTIONS instances."
-    (let ((item (make-symbol "item"))
-          (star-items (make-symbol "star-items"))
-          (production-form (mole-build-sequence productions)))
-      `(let (,item ,star-items)
-         (while (mole-parse-success-p (setq ,item ,production-form))
-           (setq ,star-items (nconc ,star-items ,item)))
-         (if ,star-items
-             (mole-node '+ ,star-items ,mole-build-fusing)
-           'fail))))
+(defun mole-build-negative-lookahead (productions)
+  "Return a form for evaluating (not PRODUCTIONS) in `save-excursion'."
+  `(mole-parse-match (res (save-excursion ,(mole-build-sequence productions)))
+     'fail (mole-node-literal (point) (point))))
 
-  (defun mole-build-zero-or-one (productions)
-    "Return a form that evaluates to zero or one PRODUCTIONS instances."
-    (let ((res (make-symbol "res")))
-      `(mole-node '\? (mole-parse-match (,res ,(mole-build-sequence productions))
-                        ,res nil)
-                  ,mole-build-fusing)))
+(defun mole-build-repetition (productions)
+  "Return a form for evaluating PRODUCTIONS multiple times."
+  (let ((min (car productions))
+        (max (cadr productions))
+        (productions (cddr productions))
+        (num (make-symbol "num"))
+        (child (make-symbol "child"))
+        (children (make-symbol "children")))
+    (unless (numberp max)
+      (push max productions)
+      (setq max min))
+    `(mole-maybe-save-excursion
+       (let ((,num 0) ,child ,children)
+         (while (and (< ,num ,max)
+                     (mole-parse-success-p (setq ,child ,(mole-build-sequence productions))))
+           (cl-callf nconc ,children ,child)
+           (cl-incf ,num))
+         (if (>= ,num ,min)
+             (mole-node 'repetition ,children ,mole-build-fusing)
+           'fail)))))
 
-  (defun mole-build-or (productions)
-    "Return a form for evaluating a disjunction between PRODUCTIONS."
-    (let ((child (make-symbol "child")))
-      `(or ,@(mapcar (lambda (prod)
-                       `(mole-parse-match (,child ,(mole-build-element prod))
-                          ,child nil))
-                     productions)
-           'fail)))
+(defun mole-build-lexical (productions)
+  "Return a form for evaluation PRODUCTIONS, but in a lexical environment."
+  (let ((res (make-symbol "res")))
+    `(let ((mole-runtime-force-lexical t))
+       (mole-parse-match (,res ,(mole-build-sequence productions))
+         (mole-node 'lexical ,res ,mole-build-fusing)
+         'fail))))
 
-  (defun mole-build-lookahead (productions)
-    "Return a form for evaluating PRODUCTIONS in `save-excursion'."
-    `(mole-parse-match (res (save-excursion ,(mole-build-sequence productions)))
-       (mole-node-literal (point) (point)) 'fail))
+(defun mole-build-char (sets)
+  "Return a form for matching SETS of characters, like using char in `rx'."
+  `(if (looking-at (rx (char ,@sets)))
+       (prog1 (mole-node-literal (point) (1+ (point)))
+         (mole-update-highwater-mark (point))
+         (forward-char)
+         ,(unless mole-build-lexical `(mole-chomp-whitespace)))
+     (mole-update-highwater-mark (point))
+     'fail))
 
-  (defun mole-build-negative-lookahead (productions)
-    "Return a form for evaluating (not PRODUCTIONS) in `save-excursion'."
-    `(mole-parse-match (res (save-excursion ,(mole-build-sequence productions)))
-       'fail (mole-node-literal (point) (point))))
+(defun mole-build-char-not (sets)
+  "Return a form for matching characters not in SETS, like using (not (any ...)) in `rx'."
+  `(if (looking-at (rx (not (any ,@sets))))
+       (prog1 (mole-node-literal (point) (1+ (point)))
+         (mole-update-highwater-mark (point))
+         (forward-char)
+         ,(unless mole-build-lexical `(mole-chomp-whitespace)))
+     (mole-update-highwater-mark (point))
+     'fail))
 
-  (defun mole-build-repetition (productions)
-    "Return a form for evaluating PRODUCTIONS multiple times."
-    (let ((min (car productions))
-          (max (cadr productions))
-          (productions (cddr productions))
-          (num (make-symbol "num"))
-          (child (make-symbol "child"))
-          (children (make-symbol "children")))
-      (unless (numberp max)
-        (push max productions)
-        (setq max min))
-      `(mole-maybe-save-excursion
-         (let ((,num 0) ,child ,children)
-           (while (and (< ,num ,max)
-                       (mole-parse-success-p (setq ,child ,(mole-build-sequence productions))))
-             (cl-callf nconc ,children ,child)
-             (cl-incf ,num))
-           (if (>= ,num ,min)
-               (mole-node 'repetition ,children ,mole-build-fusing)
-             'fail)))))
+(cl-defun mole-build-with-context (((key value) &rest productions))
+  "Add (KEY . VALUE) to the parse context and execute PRODUCTIONS."
+  (cl-assert (symbolp key))
+  (let ((res (make-symbol "res")))
+    `(let ((mole-runtime-context (mole-context-set mole-runtime-context ',key ,value)))
+       (mole-parse-match (,res ,(mole-build-sequence productions))
+         (mole-node 'with-context ,res ,mole-build-fusing)
+         'fail))))
 
-  (defun mole-build-lexical (productions)
-    "Return a form for evaluation PRODUCTIONS, but in a lexical environment."
-    (let ((res (make-symbol "res")))
-      `(let ((mole-runtime-force-lexical t))
+(cl-defun mole-build-if-context (((key value) &rest productions))
+  "If context[KEY] is VALUE, execute PRODUCTIONS."
+  (cl-assert (symbolp key))
+  (let ((res (make-symbol "res")))
+    `(if (eq ,value (mole-context-get mole-runtime-context ',key))
          (mole-parse-match (,res ,(mole-build-sequence productions))
-           (mole-node 'lexical ,res ,mole-build-fusing)
-           'fail))))
+           (mole-node 'if-context ,res ,mole-build-fusing)
+           'fail)
+       'fail)))
 
-  (defun mole-build-char (sets)
-    "Return a form for matching SETS of characters, like using char in `rx'."
-    `(if (looking-at (rx (char ,@sets)))
-         (prog1 (mole-node-literal (point) (1+ (point)))
-           (mole-update-highwater-mark (point))
-           (forward-char)
-           ,(unless mole-build-lexical `(mole-chomp-whitespace)))
-       (mole-update-highwater-mark (point))
-       'fail))
+(cl-defun mole-build-extern ((fn &rest args))
+  "Build a custom matcher calling FN with ARGS."
+  `(apply ,fn (list ,@(mapcar (lambda (arg)
+                                (if (symbolp arg)
+                                    (mole-munge-production-name arg)
+                                  arg))
+                              args))))
 
-  (defun mole-build-char-not (sets)
-    "Return a form for matching characters not in SETS, like using (not (any ...)) in `rx'."
-    `(if (looking-at (rx (not (any ,@sets))))
-         (prog1 (mole-node-literal (point) (1+ (point)))
-           (mole-update-highwater-mark (point))
-           (forward-char)
-           ,(unless mole-build-lexical `(mole-chomp-whitespace)))
-       (mole-update-highwater-mark (point))
-       'fail))
-
-  (cl-defun mole-build-with-context (((key value) &rest productions))
-    "Add (KEY . VALUE) to the parse context and execute PRODUCTIONS."
-    (cl-assert (symbolp key))
-    (let ((res (make-symbol "res")))
-      `(let ((mole-runtime-context (mole-context-set mole-runtime-context ',key ,value)))
-         (mole-parse-match (,res ,(mole-build-sequence productions))
-           (mole-node 'with-context ,res ,mole-build-fusing)
-           'fail))))
-
-  (cl-defun mole-build-if-context (((key value) &rest productions))
-    "If context[KEY] is VALUE, execute PRODUCTIONS."
-    (cl-assert (symbolp key))
-    (let ((res (make-symbol "res")))
-      `(if (eq ,value (mole-context-get mole-runtime-context ',key))
-           (mole-parse-match (,res ,(mole-build-sequence productions))
-             (mole-node 'if-context ,res ,mole-build-fusing)
-             'fail)
-         'fail)))
-
-  (cl-defun mole-build-extern ((fn &rest args))
-    "Build a custom matcher calling FN with ARGS."
-    `(apply ,fn (list ,@(mapcar (lambda (arg)
-                                  (if (symbolp arg)
-                                      (mole-munge-production-name arg)
-                                    arg))
-                                args))))
-
-  (cl-defun mole-build-parametric-call ((prod &rest productions))
-    "Build a parametric application of PROD with PRODUCTIONS as arguments."
-    `(funcall ,(mole-munge-production-name prod)
-              ,@(mapcar (lambda (p)
-                          (cond
-                           ((functionp p) `,p)
-                           ((and (symbolp p) (gethash p mole-build-prod-nums)) `,p)
-                           ((and (symbolp p) (memq p mole-build-params)) `,p)
-                           ((eq (car-safe p) 'quote) p)
-                           (t `(lambda () ,(mole-build-element p)))))
-                        productions))))
+(cl-defun mole-build-parametric-call ((prod &rest productions))
+  "Build a parametric application of PROD with PRODUCTIONS as arguments."
+  `(funcall ,(mole-munge-production-name prod)
+            ,@(mapcar (lambda (p)
+                        (cond
+                         ((functionp p) `,p)
+                         ((and (symbolp p) (gethash p mole-build-prod-nums)) `,p)
+                         ((and (symbolp p) (memq p mole-build-params)) `,p)
+                         ((eq (car-safe p) 'quote) p)
+                         (t `(lambda () ,(mole-build-element p)))))
+                      productions)))
 
 (defmacro mole-create-grammar (&rest productions)
   "Create a new grammar object with PRODUCTIONS.
