@@ -48,9 +48,8 @@
   (let ((cases '(abcd debugger mole-runtime-force-lexical)) munged)
     (dolist (case cases)
       (setq munged (mole-munge-production-name case))
-      (cl-assert (not (eq munged case)))
-      (cl-assert (eq case (mole-unmunge-production-name munged))))))
-
+      (should-not (eq munged case))
+      (should (eq case (mole-unmunge-production-name munged))))))
 
 
 ;; Test productions
