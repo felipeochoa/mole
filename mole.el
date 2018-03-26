@@ -48,7 +48,7 @@
   '(whitespace :lexical t :fuse t (* (char " \t\n\f")))
   "If a grammar doesn't specify whitespace, this value will be used.")
 
-(defvar mole-production-keys '(:lexical :fuse :params)
+(defvar mole-production-keys '(:lexical :fuse :params :pass-thru)
   "List of keys that may be given in a production definition.
 :LEXICAL if nil, has productions chomp whitespace and comments
 before attempting a match and after a successful match.  If t, no
@@ -60,7 +60,11 @@ node.  Productions using :FUSE cannot call other productions.
 :PARAMS if non-nil should be an arglist suitable for a lambda
 form.  Applications of this production must specify productions
 to bind to this arglist, which can be referenced inside the rule
-body.")
+body.
+
+:PASS-THRU if non-nil, whenever the production has a single
+non-empty child, no wrapper node will be created for the
+production and that non-empty child will be returned instead.")
 
 (defvar mole-default-props '()
   "Plist of `mole-production-keys' to use as defaults values.")
@@ -337,11 +341,18 @@ never be chomped.  (This second arg is used so that function
   "Return a (name args body) list for SPEC."
   (cl-destructuring-bind (name props args) spec
     (let* ((children (make-symbol "children"))
+           (non-empty (cl-gensym "non-empty"))
            (mole-build-params (mapcar #'mole-munge-production-name (plist-get props :params)))
            (mole-build-lexical (plist-get props :lexical))
            (mole-build-fusing (plist-get props :fuse))
            (body `(mole-parse-match (,children ,(mole-build-sequence args))
-                    (mole-node ',name ,children ,mole-build-fusing)
+                    ,(if (plist-get props :pass-thru)
+                         `(let ((,non-empty (cl-remove-if-not #'mole-node-non-empty ,children)))
+                            (cond
+                             ((cdr ,non-empty) (mole-node ',name ,children ,mole-build-fusing))
+                             (,non-empty (car ,non-empty))
+                             (t (mole-node ',name ,children ,mole-build-fusing))))
+                       `(mole-node ',name ,children ,mole-build-fusing))
                     'fail)))
       (unless mole-build-lexical
         (setq body `(mole-maybe-save-excursion

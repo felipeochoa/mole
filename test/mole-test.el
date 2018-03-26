@@ -278,6 +278,22 @@ NUM PRODUCTION: appease flycheck."
                                                    x y z)))
   () (""))
 
+(ert-deftest mole-pass-thru ()
+  "Test :pass-thru."
+  (eval
+   `(let ((grammar (mole-create-grammar
+                    (xyz :pass-thru t x y (\? z))
+                    (x (\? "x"))
+                    (y (\? "y"))
+                    (z "z"))))
+      (should (equal (mole-node-to-sexp (mole-parse-string grammar 'xyz "x"))
+                     '(x "x")))
+      (should (equal (mole-node-to-sexp (mole-parse-string grammar 'xyz "xy"))
+                     '(xyz (x "x") (y "y"))))
+      (should (equal (mole-node-to-sexp (mole-parse-string grammar 'xyz ""))
+                     '(xyz (x) (y)))))
+   t))
+
 (ert-deftest mole-test-debug-call-stack ()
   "Ensure that when debugging the call stack is set correctly."
   (let (grammar)
