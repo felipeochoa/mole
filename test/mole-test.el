@@ -81,6 +81,10 @@
                               (xyz . t)))))
    t))
 
+(ert-deftest mole-node-non-empty ()
+  (should (mole-node-non-empty (make-mole-node :name 'xyz :pos 13 :end 14)))
+  (should-not (mole-node-non-empty (make-mole-node :name 'xyz :pos 1 :end 1))))
+
 
 ;; Test productions
 

@@ -127,6 +127,10 @@ contents.")
 (cl-defstruct (mole-node-literal (:include mole-node))
   "Node class for anonymous literals.") ;; just ignore name and children
 
+(defsubst mole-node-non-empty (node)
+  "Return nil if NODE matched an empty string."
+  (< (mole-node-pos node) (mole-node-end node)))
+
 (defsubst mole-node-clean-name (node)
   "Return NODE's name after unmunging."
   (mole-unmunge-production-name (mole-node-name node)))
