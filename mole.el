@@ -437,6 +437,8 @@ PRODUCTIONS are the individual productions to match."
         (production-form (mole-build-sequence productions)))
     `(let (,item ,star-items)
        (while (mole-parse-success-p (setq ,item ,production-form))
+         (mole-debug (unless (cl-some #'mole-node-non-empty ,item)
+                       (error "Infinite loop detected")))
          (setq ,star-items (nconc ,star-items ,item)))
        (mole-node '* ,star-items ,mole-build-fusing))))
 
@@ -447,6 +449,8 @@ PRODUCTIONS are the individual productions to match."
         (production-form (mole-build-sequence productions)))
     `(let (,item ,star-items)
        (while (mole-parse-success-p (setq ,item ,production-form))
+         (mole-debug (unless (cl-some #'mole-node-non-empty ,item)
+                       (error "Infinite loop detected")))
          (setq ,star-items (nconc ,star-items ,item)))
        (if ,star-items
            (mole-node '+ ,star-items ,mole-build-fusing)

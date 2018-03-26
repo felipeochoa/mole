@@ -314,6 +314,18 @@ NUM PRODUCTION: appease flycheck."
                                  'fail)))))))
     (mole-parse-string grammar 'p1 "")))
 
+(ert-deftest mole-test-infinite-loop-star ()
+  "Ensure infinite loops are detected in debug mode for * nodes."
+  (let ((grammar (mole-expand-with-debug-on (mole-create-grammar (p (* (\? "x")))))))
+    (let ((err (should-error (mole-parse-string grammar 'p ""))))
+      (should (string-match-p "infinite" (cadr err))))))
+
+(ert-deftest mole-test-infinite-loop-plus ()
+  "Ensure infinite loops are detected in debug mode for + nodes."
+  (let ((grammar (mole-expand-with-debug-on (mole-create-grammar (p (+ (\? "x")))))))
+    (let ((err (should-error (mole-parse-string grammar 'p "xxx"))))
+      (should (string-match-p "infinite" (cadr err))))))
+
 (ert-deftest mole-fuse-production ()
   "Ensure fusing productions join their children."
   (let* ((g (eval `(mole-create-grammar
