@@ -294,21 +294,24 @@ NUM PRODUCTION: appease flycheck."
                      '(xyz (x) (y)))))
    t))
 
+(defmacro mole-expand-with-debug-on (&rest body)
+  "Macroexpand BODY with `mole-build-with-debug' set to t."
+  (let ((mole-build-with-debug t))
+    (macroexpand-all `(progn ,@body))))
+
 (ert-deftest mole-test-debug-call-stack ()
   "Ensure that when debugging the call stack is set correctly."
-  (let (grammar)
-    (let ((mole-build-with-debug t))
-      (setq grammar (eval `(mole-create-grammar
-                            (p1 p2)
-                            (p2 p3 p4)
-                            (p3 p5)
-                            (p4 (extern (lambda ()
-                                          (should (equal mole-debug-call-stack '(p4 p2 p1)))
-                                          'fail)))
-                            (p5 (extern (lambda ()
-                                          (should (equal mole-debug-call-stack '(p5 p3 p2 p1)))
-                                          'fail))))
-                          t)))
+  (let ((grammar (mole-expand-with-debug-on
+                  (mole-create-grammar
+                   (p1 p2)
+                   (p2 p3 p4)
+                   (p3 p5)
+                   (p4 (extern (lambda ()
+                                 (should (equal mole-debug-call-stack '(p4 p2 p1)))
+                                 'fail)))
+                   (p5 (extern (lambda ()
+                                 (should (equal mole-debug-call-stack '(p5 p3 p2 p1)))
+                                 'fail)))))))
     (mole-parse-string grammar 'p1 "")))
 
 (ert-deftest mole-fuse-production ()
