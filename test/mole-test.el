@@ -126,7 +126,7 @@ FAILURES is a list of strings that NAME should not parse."
             (list
              'letrec (list
                       ,@(mapcar (lambda (p) `(list ',(car p)
-                                                   (cons 'lambda (cdr (mole-build-production ',p)))))
+                                                   `(lambda ,@(cdr (mole-build-production ',p)))))
                                 productions)
                       '(mole-runtime-cache nil))
              '(dolist (succ ',successes)
