@@ -684,7 +684,7 @@ parametric production (one defined with `:params')."
     (push mole-default-whitespace-terminal productions))
   (cl-callf mole-munge-productions productions)
   (unless (plist-get (cadr (assq 'mole~whitespace productions)) :lexical)
-    (error "`whitespace' production must be lexical"))
+    (error "`whitespace' production must be lexical to avoid an infinite loop"))
   (let ((dups (mole-get-duplicates (mapcar #'car productions))))
     (when dups (error "Duplicate production definitions: %S" dups)))
   (let ((mole-build-prod-nums (mole-make-prod-num-table (mapcar 'car productions))))
