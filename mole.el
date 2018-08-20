@@ -93,7 +93,7 @@ is parsed again and the new result and context replace the cache
 contents.")
 
 (defvar mole-build-lexical nil
-  "If t, literal parsing builders won't chomp whitespace.")
+  "If t, literal parsing builders won't include whitespace chomping code.")
 
 (defvar mole-build-fusing nil
   "Build-time dynamic variable to generate fusing nodes.")
@@ -290,18 +290,14 @@ defaults to simply returning 'fail."
   `(or mole-runtime-force-lexical
        (mole-ignore-hw-mark (funcall mole~whitespace))))
 
-(defmacro mole-parse-anonymous-literal (string lexical)
-  "Return a literal-parsing form for STRING.
-STRING is the string to parse, LEXICAL is t if whitespace should
-never be chomped.  (This second arg is used so that function
-`mole-build-lexical' can be eagerly evaluated at build time.)"
-  (declare (indent defun) (debug (stringp &or "t" "nil")))
+(defmacro mole-parse-anonymous-literal (string)
+  "Return a literal-parsing form for STRING."
+  (declare (indent defun) (debug (stringp)))
   (if (= 1 (length string))
       `(if (eq (char-after) ,(aref string 0))
            (prog1 (mole-node-literal (point) (1+ (point)))
              (mole-update-highwater-mark (point))
-             (forward-char)
-             ,(unless lexical `(mole-chomp-whitespace)))
+             (forward-char))
          (mole-update-highwater-mark (point))
          'fail)
     (let ((i (make-symbol "i")) (pos (make-symbol "pos")))
@@ -311,9 +307,9 @@ never be chomped.  (This second arg is used so that function
              (forward-char)
              (cl-incf ,i))
            (if (= ,i ,(length string))
-               (prog1 (mole-node-literal ,pos (point))
+               (progn
                  (mole-update-highwater-mark (1- (point)))
-                 ,(unless lexical `(mole-chomp-whitespace)))
+                 (mole-node-literal ,pos (point)))
              (mole-update-highwater-mark (point))
              'fail))))))
 
@@ -354,12 +350,6 @@ never be chomped.  (This second arg is used so that function
                              (t (mole-node ',name ,children ,mole-build-fusing))))
                        `(mole-node ',name ,children ,mole-build-fusing))
                     'fail)))
-      (unless mole-build-lexical
-        (setq body `(mole-maybe-save-excursion
-                      (mole-chomp-whitespace)
-                      (prog1 ,body
-                        ;; Need to chomp again in case final production is lexical
-                        (mole-chomp-whitespace)))))
       (unless mole-build-params
         (setq body `(mole-cached-result ,(gethash name mole-build-prod-nums) ,body)))
       (when mole-build-with-debug
@@ -378,7 +368,7 @@ never be chomped.  (This second arg is used so that function
                 (memq production mole-build-params))
       (error "Production %s is not defined" production))
     `(funcall ,production))
-   ((stringp production) `(mole-parse-anonymous-literal ,production ,mole-build-lexical))
+   ((stringp production) `(mole-parse-anonymous-literal ,production))
    ((consp production)
     (pcase (car production)
       (': (mole-build-sequence-operator (cdr production)))
@@ -404,7 +394,11 @@ never be chomped.  (This second arg is used so that function
 The resulting form will be a list of `mole-node's and literals;
 one for each item in productions.  If `mole-build-fusing' is
 non-nil, all the descendant nodes are concatenated together into
-a single string literal."
+a single string literal.
+
+If `mole-build-lexical' is nil, whitespace is automatically
+chomped (but not included in the resulting node) between each
+product."
   (let ((res (make-symbol "res")))
     (if (null (cdr productions))
         ;; special-case single item sequences
@@ -416,11 +410,17 @@ a single string literal."
         `(mole-maybe-save-excursion
            (cl-block ,block-name
              (list
+              (mole-parse-match (,res ,(mole-build-element (car productions)))
+                ,res
+                (cl-return-from ,block-name ,res))
               ,@(mapcar (lambda (prod)
-                          `(mole-parse-match (,res ,(mole-build-element prod))
+                          `(mole-parse-match (,res
+                                              (progn
+                                                ,(unless mole-build-lexical `(mole-chomp-whitespace))
+                                                ,(mole-build-element prod)))
                              ,res
                              (cl-return-from ,block-name ,res)))
-                        productions))))))))
+                        (cdr productions)))))))))
 
 (defun mole-build-sequence-operator (productions)
   "Like `mole-build-sequence', but returning a `mole-node-operator'.
@@ -436,10 +436,18 @@ PRODUCTIONS are the individual productions to match."
         (star-items (make-symbol "star-items"))
         (production-form (mole-build-sequence productions)))
     `(let (,item ,star-items)
-       (while (mole-parse-success-p (setq ,item ,production-form))
-         (mole-debug (unless (cl-some #'mole-node-non-empty ,item)
-                       (error "Infinite loop detected")))
-         (setq ,star-items (nconc ,star-items ,item)))
+       (when (mole-parse-success-p (setq ,item ,production-form))
+         (setq ,star-items ,item)
+         (while (mole-parse-success-p
+                 (setq ,item
+                       ,(if mole-build-lexical
+                            production-form
+                          `(mole-maybe-save-excursion
+                             (mole-chomp-whitespace)
+                             ,production-form))))
+           (mole-debug (unless (cl-some #'mole-node-non-empty ,item)
+                         (error "Infinite loop detected")))
+           (setq ,star-items (nconc ,star-items ,item))))
        (mole-node '* ,star-items ,mole-build-fusing))))
 
 (defun mole-build-one-or-more (productions)
@@ -448,12 +456,20 @@ PRODUCTIONS are the individual productions to match."
         (star-items (make-symbol "star-items"))
         (production-form (mole-build-sequence productions)))
     `(let (,item ,star-items)
-       (while (mole-parse-success-p (setq ,item ,production-form))
-         (mole-debug (unless (cl-some #'mole-node-non-empty ,item)
-                       (error "Infinite loop detected")))
-         (setq ,star-items (nconc ,star-items ,item)))
-       (if ,star-items
-           (mole-node '+ ,star-items ,mole-build-fusing)
+       (mole-parse-match (,item ,production-form)
+         (progn
+           (setq ,star-items ,item)
+           (while (mole-parse-success-p
+                   (setq ,item
+                         ,(if mole-build-lexical
+                              production-form
+                            `(mole-maybe-save-excursion
+                               (mole-chomp-whitespace)
+                               ,production-form))))
+             (mole-debug (unless (cl-some #'mole-node-non-empty ,item)
+                           (error "Infinite loop detected")))
+             (setq ,star-items (nconc ,star-items ,item)))
+           (mole-node '+ ,star-items ,mole-build-fusing))
          'fail))))
 
 (defun mole-build-zero-or-one (productions)
@@ -489,14 +505,22 @@ PRODUCTIONS are the individual productions to match."
         (productions (cddr productions))
         (num (make-symbol "num"))
         (child (make-symbol "child"))
-        (children (make-symbol "children")))
+        (children (make-symbol "children"))
+        production-form)
     (unless (numberp max)
       (push max productions)
       (setq max min))
+    (setq production-form (mole-build-sequence productions))
     `(mole-maybe-save-excursion
        (let ((,num 0) ,child ,children)
          (while (and (< ,num ,max)
-                     (mole-parse-success-p (setq ,child ,(mole-build-sequence productions))))
+                     (mole-parse-success-p
+                      (setq ,child
+                            ,(if mole-build-lexical
+                                 production-form
+                               `(mole-maybe-save-excursion
+                                  (or (zerop ,num) (mole-chomp-whitespace))
+                                  ,production-form)))))
            (cl-callf nconc ,children ,child)
            (cl-incf ,num))
          (if (>= ,num ,min)
@@ -505,7 +529,8 @@ PRODUCTIONS are the individual productions to match."
 
 (defun mole-build-lexical (productions)
   "Return a form for evaluation PRODUCTIONS, but in a lexical environment."
-  (let ((res (make-symbol "res")))
+  (let ((mole-build-lexical t)
+        (res (make-symbol "res")))
     `(let ((mole-runtime-force-lexical t))
        (mole-parse-match (,res ,(mole-build-sequence productions))
          (mole-node 'lexical ,res ,mole-build-fusing)
@@ -514,20 +539,20 @@ PRODUCTIONS are the individual productions to match."
 (defun mole-build-char (sets)
   "Return a form for matching SETS of characters, like using char in `rx'."
   `(if (looking-at (rx (char ,@sets)))
-       (prog1 (mole-node-literal (point) (1+ (point)))
+       (progn
          (mole-update-highwater-mark (point))
          (forward-char)
-         ,(unless mole-build-lexical `(mole-chomp-whitespace)))
+         (mole-node-literal (1- (point)) (point)))
      (mole-update-highwater-mark (point))
      'fail))
 
 (defun mole-build-char-not (sets)
   "Return a form for matching characters not in SETS, like using (not (any ...)) in `rx'."
   `(if (looking-at (rx (not (any ,@sets))))
-       (prog1 (mole-node-literal (point) (1+ (point)))
+       (progn
          (mole-update-highwater-mark (point))
          (forward-char)
-         ,(unless mole-build-lexical `(mole-chomp-whitespace)))
+         (mole-node-literal (1- (point)) (point)))
      (mole-update-highwater-mark (point))
      'fail))
 
@@ -636,7 +661,8 @@ will greedily try to parse beyond the minimal match until PRODS
 stop matching or it reaches the maximum number of repetitions.
 
 \(lexical &rest prods\) -- Match PRODS sequentially, without
-chomping whitespace between productions.
+chomping whitespace between productions.  Applies recursively to
+sub-productions within PRODS.
 
 \(with-context (key value) &rest prods\) -- Set KEY to VALUE in
 the parse context and match PRODS sequentially.

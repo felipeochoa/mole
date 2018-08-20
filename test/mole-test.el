@@ -169,10 +169,17 @@ FAILURES is a list of strings that NAME should not parse."
   ("" "a" "b" "c" "d"))
 
 (mole-define-production-test ((zero-or-more (* "t" "a")))
-  ("" "tatatata" ("xx" . 1)))
+  ("" "tatatata" "ta ta tata" ("xx" . 1)))
+
+(mole-define-production-test ((zero-or-more-lexical :lexical t (* "t" "a")))
+  ("" "tatatata" ("ta ta" . 3) ("tata ta" . 5) ("xx" . 1)))
 
 (mole-define-production-test ((one-or-more (+ "t" "a")))
-  ("tatatata" "ta")
+  ("tatatata" "ta ta tata" "ta")
+  ("" "xx" "at" "t" "a"))
+
+(mole-define-production-test ((one-or-more-lexical :lexical t (+ "t" "a")))
+  ("tatatata" ("ta ta" . 3) ("tata ta" . 5))
   ("" "xx" "at" "t" "a"))
 
 (mole-define-production-test ((zero-or-one (\? "t" "a")))
@@ -202,15 +209,15 @@ FAILURES is a list of strings that NAME should not parse."
   ("test"))
 
 (mole-define-production-test ((whitespace-non-lexical "a" "b"))
-  ("ab" "  ab  " " a   b  "))
+  ("ab" "a  b") (" a   b  "))
 
 (mole-define-production-test ((whitespace-backtracking :lexical t "a" (or nonterminal "b"))
                               (nonterminal "x"))
-  ("ab" "a   x  ") ("a b"))
+  ("ab" "ax") ("a b" "a   x  "))
 
 (mole-define-production-test ((lexical lexical-callee lexical-callee)
-                              (lexical-callee :lexical t "a"))
-  ("aa" " aa" "  aa  ") ("a a"))
+                              (lexical-callee :lexical t "a" "b"))
+  ("abab" "ab ab") (" abab" "a b ab"))
 
 (defun mole-extern-test-fn (num production)
   "Test function for the extern element.
@@ -230,15 +237,15 @@ NUM PRODUCTION: appease flycheck."
                               (non-lexical "a"))
   ("axyza") ("a a" ""))
 
-(mole-define-production-test ((repeat (2 lexical) (1 3 non-lexical))
-                              (lexical :lexical t "a")
+(mole-define-production-test ((repeat (lexical (2 lexical)) (1 3 non-lexical))
+                              (lexical "a")
                               (non-lexical "t"))
-  ("aat" "aatt" "aattt" "aa  t  t  t  " "aa  tt t" ("aatttt" . 6))
+  ("aat" "aatt" "aattt" ("aa  t  t  t  " . 12) "aa  tt t" ("aatttt" . 6))
   ("" "at" "aaat" "a att"))
 
 (mole-define-production-test ((force-lexical (lexical (2 non-lexical)) "|" (2 non-lexical))
                               (non-lexical "a"))
-  ("aa| a a") ("a a| a a"))
+  ("aa|aa" "aa|a a" "aa | a a") ("a a| a a"))
 
 (mole-define-production-test ((force-failing-lexical (or lexi "abcd"))
                               (lexi (lexical "x" "y" "z")))
@@ -382,18 +389,13 @@ NUM PRODUCTION: appease flycheck."
                    (whitespace (* (char " \t\n\f")))
                    (a "a")
                    :lexical nil
-                   (b "b")
-                   (c "c")
-                   :lexical t
-                   (d "d"))
+                   (b "b" "b"))
                  t)))
 
     (should (equal (mole-node-to-sexp (mole-parse-string g 'a "a")) '(a "a")))
     (should (equal (mole-node-to-sexp (mole-parse-string g 'a " a")) 'fail))
-    (should (equal (mole-node-to-sexp (mole-parse-string g 'b " b  ")) '(b "b")))
-    (should (equal (mole-node-to-sexp (mole-parse-string g 'c " c  ")) '(c "c")))
-    (should (equal (mole-node-to-sexp (mole-parse-string g 'd "d")) '(d "d")))
-    (should (equal (mole-node-to-sexp (mole-parse-string g 'd " d")) 'fail))))
+    (should (equal (mole-node-to-sexp (mole-parse-string g 'b "b  b")) '(b "b" "b")))
+    (should (equal (mole-node-to-sexp (mole-parse-string g 'b "bb")) '(b "b" "b")))))
 
 (defvar mole-test-hwm nil
   "Used to capture `mole-runtime-highwater-mark' during testing.")
