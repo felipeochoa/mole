@@ -427,46 +427,38 @@ PRODUCTIONS are the individual productions to match."
        (mole-node ': ,res ,mole-build-fusing)
        'fail)))
 
+(defun mole--unbouded-repeat-helper (productions star-items)
+  "Helper for `mole-build-zero-or-more' and `mole-build-zero-or-one'.
+PRODUCTIONS are the productions to match.
+STAR-ITEMS is the symbol to use in the form for the parsed productions."
+  (let ((item (make-symbol "item"))
+        (production-form (mole-build-sequence productions)))
+    `(let (,item)
+       (while (mole-parse-success-p
+               (setq ,item
+                     ,(if mole-build-lexical
+                          production-form
+                        `(mole-maybe-save-excursion
+                           (and ,star-items (mole-chomp-whitespace))
+                           ,production-form))))
+         (mole-debug (unless (cl-some #'mole-node-non-empty ,item)
+                       (error "Infinite loop detected")))
+         (setq ,star-items (nconc ,star-items ,item))))))
+
 (defun mole-build-zero-or-more (productions)
   "Return a form that evaluates to zero or more PRODUCTIONS instances."
-  (let ((item (make-symbol "item"))
-        (star-items (make-symbol "star-items"))
-        (production-form (mole-build-sequence productions)))
-    `(let (,item ,star-items)
-       (when (mole-parse-success-p (setq ,item ,production-form))
-         (setq ,star-items ,item)
-         (while (mole-parse-success-p
-                 (setq ,item
-                       ,(if mole-build-lexical
-                            production-form
-                          `(mole-maybe-save-excursion
-                             (mole-chomp-whitespace)
-                             ,production-form))))
-           (mole-debug (unless (cl-some #'mole-node-non-empty ,item)
-                         (error "Infinite loop detected")))
-           (setq ,star-items (nconc ,star-items ,item))))
+  (let ((star-items (make-symbol "star-items")))
+    `(let (,star-items)
+       ,(mole--unbouded-repeat-helper productions star-items)
        (mole-node '* ,star-items ,mole-build-fusing))))
 
 (defun mole-build-one-or-more (productions)
   "Return a form that evaluates to one or more PRODUCTIONS instances."
-  (let ((item (make-symbol "item"))
-        (star-items (make-symbol "star-items"))
-        (production-form (mole-build-sequence productions)))
-    `(let (,item ,star-items)
-       (mole-parse-match (,item ,production-form)
-         (progn
-           (setq ,star-items ,item)
-           (while (mole-parse-success-p
-                   (setq ,item
-                         ,(if mole-build-lexical
-                              production-form
-                            `(mole-maybe-save-excursion
-                               (mole-chomp-whitespace)
-                               ,production-form))))
-             (mole-debug (unless (cl-some #'mole-node-non-empty ,item)
-                           (error "Infinite loop detected")))
-             (setq ,star-items (nconc ,star-items ,item)))
-           (mole-node '+ ,star-items ,mole-build-fusing))
+  (let ((star-items (make-symbol "star-items")))
+    `(let (,star-items)
+       ,(mole--unbouded-repeat-helper productions star-items)
+       (if ,star-items
+           (mole-node '+ ,star-items ,mole-build-fusing)
          'fail))))
 
 (defun mole-build-zero-or-one (productions)
