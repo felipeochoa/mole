@@ -73,9 +73,6 @@ production and that non-empty child will be returned instead.")
                                 with-context if-context)
   "List of symbols reserved for mole operators.")
 
-(defvar mole-runtime-force-lexical nil
-  "If t, even non-lexical productions will not chomp whitespace.")
-
 (defvar mole-runtime-highwater-mark 0
   "Stores the index of the last character contributing to a parse.
 This position may be beyond than the end of the realized node's
@@ -286,9 +283,8 @@ defaults to simply returning 'fail."
                            ,prod-num mole-runtime-context ,res))))))
 
 (defmacro mole-chomp-whitespace ()
-  "Chomp whitespace unless `mole-runtime-force-lexical' is t."
-  `(or mole-runtime-force-lexical
-       (mole-ignore-hw-mark (funcall mole~whitespace))))
+  "Chomp whitespace."
+  `(mole-ignore-hw-mark (funcall mole~whitespace)))
 
 (defmacro mole-parse-anonymous-literal (string)
   "Return a literal-parsing form for STRING."
@@ -531,10 +527,9 @@ PRODUCTIONS are the individual productions to match."
   "Return a form for evaluation PRODUCTIONS, but in a lexical environment."
   (let ((mole-build-lexical t)
         (res (make-symbol "res")))
-    `(let ((mole-runtime-force-lexical t))
-       (mole-parse-match (,res ,(mole-build-sequence productions))
-         (mole-node 'lexical ,res ,mole-build-fusing)
-         'fail))))
+    `(mole-parse-match (,res ,(mole-build-sequence productions))
+       (mole-node 'lexical ,res ,mole-build-fusing)
+       'fail)))
 
 (defun mole-build-char (sets)
   "Return a form for matching SETS of characters, like using char in `rx'."

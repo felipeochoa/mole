@@ -45,7 +45,7 @@
 ;; Test the helpers
 (ert-deftest mole-name-munging ()
   "Ensure the symbol munging functions work correctly"
-  (let ((cases '(abcd debugger mole-runtime-force-lexical)) munged)
+  (let ((cases '(abcd debugger mole-runtime-context)) munged)
     (dolist (case cases)
       (setq munged (mole-munge-production-name case))
       (should-not (eq munged case))
@@ -213,11 +213,15 @@ FAILURES is a list of strings that NAME should not parse."
 
 (mole-define-production-test ((whitespace-backtracking :lexical t "a" (or nonterminal "b"))
                               (nonterminal "x"))
-  ("ab" "ax") ("a b" "a   x  "))
+  ("ab" "ax") ("a b" "a   x" "a   x  "))
 
 (mole-define-production-test ((lexical lexical-callee lexical-callee)
                               (lexical-callee :lexical t "a" "b"))
   ("abab" "ab ab") (" abab" "a b ab"))
+
+(mole-define-production-test ((lexical-not-runtime :lexical t (lexical non-lexical non-lexical))
+                              (non-lexical "a" "b"))
+  ("abab" "a ba b") ("ab ab"))
 
 (defun mole-extern-test-fn (num production)
   "Test function for the extern element.
