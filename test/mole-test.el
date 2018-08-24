@@ -223,6 +223,10 @@ FAILURES is a list of strings that NAME should not parse."
                               (non-lexical "a" "b"))
   ("abab" "a ba b") ("ab ab"))
 
+(mole-define-production-test ((symbol (\? "x") the-symbol (\? "x"))
+                              (the-symbol `abcd))
+  ("abcd" "x abcd x") ("xabcd" "abcdx" "xabcdx"))
+
 (defun mole-extern-test-fn (num production)
   "Test function for the extern element.
 NUM PRODUCTION: appease flycheck."

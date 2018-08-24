@@ -380,6 +380,7 @@ defaults to simply returning 'fail."
       ('extern (mole-build-extern (cdr production)))
       ('with-context (mole-build-with-context (cdr production)))
       ('if-context (mole-build-if-context (cdr production)))
+      ('\` (mole-build-symbol (cadr production)))
       ((pred numberp) (mole-build-repetition production))
       ((pred symbolp) (mole-build-parametric-call production))
       (_ (error "Unknown production %S" production))))
@@ -531,6 +532,17 @@ PRODUCTIONS are the individual productions to match."
        (mole-node 'lexical ,res ,mole-build-fusing)
        'fail)))
 
+(defun mole-build-symbol (symbol)
+  "Return a form for matching SYMBOL's name if surrounded by non-symbol characters."
+  (let ((res (make-symbol "res")))
+    `(if (not (looking-at-p (rx symbol-start)))
+         (progn (mole-update-highwater-mark (point)) 'fail)
+       (mole-parse-match (,res (mole-parse-anonymous-literal ,(symbol-name symbol)))
+         (mole-maybe-save-excursion
+           (if (looking-at-p (rx symbol-end))
+               ,res
+             'fail))))))
+
 (defun mole-build-char (sets)
   "Return a form for matching SETS of characters, like using char in `rx'."
   `(if (looking-at (rx (char ,@sets)))
@@ -612,6 +624,9 @@ a symbol -- Must be the name of a production node which is
 matched.
 
 a string -- Will be matched literally
+
+`symbol -- Will match the symbol name literally but only if
+immediately surrounded by non-symbol characters.
 
 \(char &rest char-spec\) -- Will match a regexp using the `rx'
 char production.  (This only allows character classes, ranges and
