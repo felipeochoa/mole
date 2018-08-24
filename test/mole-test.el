@@ -367,12 +367,12 @@ NUM PRODUCTION: appease flycheck."
   (let ((g (eval `(mole-create-grammar
                    (whitespace :lexical t (* (char " \t\n\f")))
                    (expression product (* (or "+" "-") product))
-                   (product number (* (or "*" "/") number))
+                   (product :pass-thru t number (* (or "*" "/") number))
                    (number :fuse t (+ (char "0-9"))))
                  t)))
     (should (equal (mole-node-to-sexp (mole-parse-string g 'expression "3 \t+ 22 * 6"))
                    '(expression
-                     (product (number "3"))
+                     (number "3")
                      "+"
                      (product (number "22") "*" (number "6")))))))
 
