@@ -720,6 +720,11 @@ can ensue."
   (intern (substring (symbol-name munged) 5)))
 
 (defun mole-munge-productions (productions)
+  "Munge PRODUCTIONS into an easier format to work with."
+  (mole--munge-productions-2
+   (mole--munge-productions-1 productions)))
+
+(defun mole--munge-productions-1 (productions)
   "Munge PRODUCTIONS from the user-friendly format into a list of specs."
   (let ((defaults mole-default-props) prods)
     (while productions
@@ -729,11 +734,17 @@ can ensue."
             (push kw defaults))
         (let* ((prod (pop productions))
                (arg-spec (mole-split-spec-args (cdr prod))))
-          (push (list (mole-munge-production-name (car prod)) ; name
+          (push (list (car prod) ; name
                       (nconc (car arg-spec) defaults) ; props
                       (cdr arg-spec)) ; spec
                 prods))))
     (nreverse prods)))
+
+(defun mole--munge-productions-2 (productions)
+  "Munge the names of PRODUCTIONS."
+  (mapcar
+   (lambda (prod) (cons (mole-munge-production-name (car prod)) (cdr prod)))
+   productions))
 
 (defun mole-parse (grammar production)
   "Attempt to parse GRAMMAR's PRODUCTION starting at point."
