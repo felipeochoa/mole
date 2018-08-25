@@ -20,7 +20,7 @@
                                   (push msg mole-js-errors)
                                   (mole-node 'literal nil nil (point) (point)))
                                 msg))
-   (must-not-match :params (prod msg) (or (! prod) (error msg)))
+   (must-not-match :params (prod msg) (or (! prod) (: prod (error msg))))
    (must-match :pass-thru t :params (prod msg) (or prod (error msg)))
    ;; lexical productions
    :lexical t :fuse t
@@ -154,18 +154,18 @@
    (yield-expr `yield (\? "*") (\? (if-context (in-function nil) (error "msg.bad.yield")))
                (or (if-context (star-p nil) (error "msg.syntax"))
                    assign-expr))
-   ;; TODO: next line needs to be lexical but expr needs to be syntactic
-   (throw (lexical `throw (* whitespace-no-eol) expr))
+   (throw :lexical t `throw (* whitespace-no-eol) expr)
    (expr assign-expr (* "," assign-expr))
    (if `if condition statement (\? `else statement))
    (switch `switch
            (must-match "(" "msg.no.paren.switch") expr (must-match ")" "msg.no.paren.after.switch")
            (must-match "{" "msg.no.brace.switch")
-           (* case-node))               ; TODO: error if multiple defaults
+           (* case-node)
+           (must-match "}" "msg.bad.switch"))
    (while `while condition statement)
    (do `do statement (must-match `while "msg.no.while.do") condition)
    (for (must-match "(" "msg.no.paren.for")
-        (or (: (or `var `let `const) variables) (= ";") expr)
+        (or (= ";") (: (or `var `let `const) variables) expr)
         (or (: (or `in `of) expr)     ; TODO: handle 'in obj' getting eaten by expr above.
                                         ; TODO: check for msg.mult.index error
             (: (must-match ";" "msg.no.semi.for")
@@ -174,9 +174,12 @@
                (\? expr)))
         (must-match ")" "msg.no.paren.for.ctrl")
         statement)
-   (try `try (or (= "{") (error "msg.no.brace.try"))
+   (try `try (must-match (= "{") "msg.no.brace.try")
         statement
-        (or finally (: catch (\? finally)) (error "msg.try.no.catchfinally")))
+        (or (: `catch catch-body (\? `finally finally-body))
+            (: `catch catch-body)
+            (: `finally finally-body)
+            (error "msg.try.no.catchfinally")))
    (with `with
          (or (if-context (use-strict t) "msg.no.with.strict")
              (: (must-match "(" "msg.no.paren.with") expr (must-match ")" "msg.no.paren.after.with")
@@ -212,9 +215,9 @@
    (auto-semi-insert (\? ";"))
    (variables variable (* "," variable))
    (import-clause (or (: "*" namespace-import)
-                      (: "{" export-bindings)
+                      (: "{" import-bindings)
                       (: export-binding (\? "," (or (: "*" namespace-import)
-                                                    (: "{" export-bindings)
+                                                    (: "{" import-bindings)
                                                     (error "msg.syntax"))))
                       (error "msg.mode.declaration.after.import")))
    (from-clause `from (or string (: `this `module)))
@@ -222,28 +225,36 @@
                     (: cond-expr (\? assign-operator assign-expr))))
    (condition (must-match "(" "msg.no.paren.cond") expr (must-match ")" "msg.no.paren.after.cond"))
    (case-node (or (: `case expr (must-match ":" "msg.no.colon.case"))
-                  (: `default (must-match ":" "msg.no.colo.case")))
-              (* (! (or `case `default eof) statement)))
-   (catch `catch (must-match "(" "msg.no.paren.catch")
-          (or (: (char "\{\[") destruct-primary-expr)
-              (must-match name "msg.bad.catchcond"))
-          (must-match ")" "msg.bad.catchcond")
-          (must-match "{" "msg.no.brace.catchblock")
-          (* statement)
-          (must-match "}" "msg.no.brace.after.body"))
-   (finally `finally statement)
+                  ;; TODO: error if multiple defaults
+                  (: `default (must-match ":" "msg.no.colon.case")))
+              (* (! (or "}" `case `default eof)) statement))
+   (catch-body (must-match "(" "msg.no.paren.catch")
+               (or (: (char "\{\[") destruct-primary-expr)
+                   (must-match name "msg.bad.catchcond"))
+               (must-match ")" "msg.bad.catchcond")
+               (must-match "{" "msg.no.brace.catchblock")
+               (* statement)
+               (must-match "}" "msg.no.brace.after.body"))
+   (finally-body statement)
    (function (with-context (in-function t)
                            (or (if-context (use-strict t) strict-function-params function-body)
                                (if-context (use-strict nil)
                                            (or (: function-params function-body-no-strict)
                                                (: strict-function-params function-body-with-strict))))))
    ;; TODO: allow customizing error message for imports
-   (export-bindings export-binding (* "," export-binding) (must-match "}" "msg.mod.rc.after.export.spec.list"))
+   (import-bindings (import-export-bindings "msg.mod.rc.after.import.spec.list"))
+   (export-bindings (import-export-bindings "msg.mod.rc.after.export.spec.list"))
+   (import-export-bindings
+    :params (err-msg)
+    (* export-binding ",")
+    (\? export-binding)
+    (must-match "}" err-msg))
    (export-binding (or (: identifier-name `as (or `default name))
                        name
                        (: identifier-name (error "msg.mod.as.after.reserved.word"))))
    ;; level 3
-   (async-arrow `async (or name (: "(" function-params)) "=>"
+   ;; TODO: Should these arrows set the yield context? Should the expr arrows set the async context?
+   (async-arrow `async (or name (: "\(" function-params)) "=>"
                 (or (: (= "{") (with-context (async-p t) statement)) expr))
    (arrow (or name (: "\(" function-params)) "=>"
           (or (: (= "{") (with-context (async-p nil) statement)) expr))
@@ -252,21 +263,15 @@
                     (must-match (: "=" assign-expr) "msg.destruct.assign.no.init"))
                  (: (must-match name '"msg.bad.var") (\? "=" (must-match assign-expr '"msg.syntax")))))
    (destruct-primary-expr (with-context (destructoring t) primary-expr))
-   (function-params (or "\)"
-                        (* (or (: (or name (: (char "\[\{") destruct-primary-expr))
-                                  (\? "=" assign-expr))
-                               ;; TODO report "msg.param.after.rest"
-                               (: (\? "...") name)
-                               (error "msg.no.paren.after.parms"))))) ; TODO: ensure rest param is final arg
-   (strict-function-params
-    (with-context (use-strict t)
-                  ;; duplicated body to avoid thrashing cache in
-                  ;; strict-mode functions
-                  (or "\)"
-                      (* (or (: (or name (: (char "\[\{") destruct-primary-expr))
-                                (\? "=" assign-expr))
-                             (: (\? "...") name)
-                             (error "msg.no.parm"))))))
+   (function-params (* function-param-1 ",")
+                    (\? (or (: function-param-1 ",")
+                            (: function-param-1 (! "..."))))
+                    (\? "..." name
+                     (\? "," function-param-1 (error "msg.param.after.rest")))
+                    (must-match "\)" "msg.no.paren.after.parms"))
+   (function-param-1 (or name (: (char "\[\{") destruct-primary-expr))
+                     (\? "=" assign-expr))
+   (strict-function-params (with-context (use-strict t) function-params))
    (function-body (must-match "{" "msg.no.brace.body") (* statement)
                   (must-match "}" "msg.no.brace.after.body"))
    (function-body-with-strict (must-match "{" "msg.no.brace.body")
@@ -292,11 +297,9 @@
    (expon-expr unary-expr (\? "**" expon-expr)) ; right-associative
    :pass-thru nil
    (unary-expr (or (: (or (char "!~+-") `void `typeof `delete) unary-expr)
-                   ;; TODO: next line needs to be lexical but member-expr needs to be syntactic
-                   (: (or "--" "++") (* whitespace-no-eol) member-expr-with-call)
+                   (lexical (or "--" "++") (* whitespace-no-eol) member-expr-with-call)
                    await
-                   ;; TODO: next line needs to be lexical but member-expr needs to be syntactic
-                   (: member-expr-with-call (\? (* whitespace-no-eol) (or "++" "--")))))
+                   (lexical member-expr-with-call (\? (* whitespace-no-eol) (or "++" "--")))))
    (argument-list (or "\)"
                       (: (\? "...") assign-expr
                          (* "," (\? "...") assign-expr)
