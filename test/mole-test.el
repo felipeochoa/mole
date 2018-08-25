@@ -522,6 +522,160 @@ NUM PRODUCTION: appease flycheck."
                               (p1 (if-context (x 123) "a")))
   ("aa") ("" "a"))
 
+
+;; Left-recursion checks
+
+(ert-deftest mole-count-args-empty ()
+  "Check `mole-count-args' with an empty arglist."
+  (should (equal (mole-count-args '()) '(0 . 0))))
+
+(ert-deftest mole-count-args-simple ()
+  "Check `mole-count-args' with simple arglists."
+  (should (equal (mole-count-args '(a)) '(1 . 1)))
+  (should (equal (mole-count-args '(a b)) '(2 . 2)))
+  (should (equal (mole-count-args '(a b c d e f g h i j)) '(10 . 10))))
+
+(ert-deftest mole-count-args-opt ()
+  "Check `mole-count-args' with &optional arguments."
+  (should (equal (mole-count-args '(&optional a)) '(0 . 1)))
+  (should (equal (mole-count-args '(&optional a b)) '(0 . 2)))
+  (should (equal (mole-count-args '(a &optional b c)) '(1 . 3)))
+  (should (equal (mole-count-args '(a b &optional c d)) '(2 . 4))))
+
+(ert-deftest mole-count-args-rest ()
+  "Check `mole-count-args' with &rest arguments."
+  (should (equal (mole-count-args '(&rest a)) '(0 . nil)))
+  (should (equal (mole-count-args '(a b &rest c)) '(2 . nil))))
+
+(ert-deftest mole-count-args-opt-rest ()
+  "Check `mole-count-args' with &optional and &rest arguments."
+  (should (equal (mole-count-args '(&optional a &rest b)) '(0 . nil)))
+  (should (equal (mole-count-args '(a &optional b &rest c)) '(1 . nil)))
+  (should (equal (mole-count-args '(a b &optional c &rest d)) '(2 . nil))))
+
+(ert-deftest mole-bind-args-empty ()
+  "Check `mole-bind-args' with an empty arglist."
+  (should (equal (mole-bind-args '() '()) '())))
+
+(ert-deftest mole-bind-args-simple ()
+  "Check `mole-bind-args' with simple arglists."
+  (should (equal (mole-bind-args '(a) '(1)) '((a 1))))
+  (should (equal (mole-bind-args '(a b) '(1 2)) '((a 1) (b 2)))))
+
+(ert-deftest mole-bind-args-opt ()
+  "Check `mole-bind-args' with &optional arguments."
+  (should (equal (mole-bind-args '(&optional a) '()) '((a nil))))
+  (should (equal (mole-bind-args '(&optional a) '(1)) '((a 1))))
+  (should (equal (mole-bind-args '(&optional a b) '()) '((a nil) (b nil))))
+  (should (equal (mole-bind-args '(&optional a b) '(1)) '((a 1) (b nil))))
+  (should (equal (mole-bind-args '(&optional a b) '(1 2)) '((a 1) (b 2))))
+  (should (equal (mole-bind-args '(a &optional b c) '(1)) '((a 1) (b nil) (c nil))))
+  (should (equal (mole-bind-args '(a &optional b c) '(1 2)) '((a 1) (b 2) (c nil))))
+  (should (equal (mole-bind-args '(a &optional b c) '(1 2 3)) '((a 1) (b 2) (c 3))))
+  (should (equal (mole-bind-args '(a b &optional c d) '(1 2)) '((a 1) (b 2) (c nil) (d nil)))))
+
+(ert-deftest mole-bind-args-rest ()
+  "Check `mole-bind-args' with &rest arguments."
+  (should (equal (mole-bind-args '(&rest a) '()) '((a nil))))
+  (should (equal (mole-bind-args '(&rest a) '(1 2 3)) '((a (1 2 3)))))
+  (should (equal (mole-bind-args '(a b &rest c) '(1 2 3 4)) '((a 1) (b 2) (c (3 4))))))
+
+(ert-deftest mole-bind-args-opt-rest ()
+  "Check `mole-bind-args' with &optional and &rest arguments."
+  (should (equal (mole-bind-args '(&optional a &rest b) '()) '((a nil) (b nil))))
+  (should (equal (mole-bind-args '(&optional a &rest b) '(1)) '((a 1) (b nil))))
+  (should (equal (mole-bind-args '(&optional a &rest b) '(1 2)) '((a 1) (b (2)))))
+  (should (equal (mole-bind-args '(&optional a &rest b) '(1 2 3)) '((a 1) (b (2 3)))))
+
+  (should (equal (mole-bind-args '(a &optional b &rest c) '(1)) '((a 1) (b nil) (c nil))))
+  (should (equal (mole-bind-args '(a &optional b &rest c) '(1 2)) '((a 1) (b 2) (c nil))))
+  (should (equal (mole-bind-args '(a &optional b &rest c) '(1 2 3)) '((a 1) (b 2) (c (3)))))
+  (should (equal (mole-bind-args '(a &optional b &rest c) '(1 2 3 4)) '((a 1) (b 2) (c (3 4))))))
+
+(ert-deftest mole-lazy ()
+  "Check that `mole-lazy' and `mole-unlazy' work as advertised."
+  (let* ((a 0) (x (mole-lazy (cl-incf a))))
+    (should (equal (list (mole-unlazy x) (mole-unlazy x) a)
+                   '(1 1 1)))))
+
+(ert-deftest mole-cycle-detect ()
+  "Check that `mole-populate-empty-table' detects a basic cycle."
+  (let* ((prods '((a b) (b a)))
+         (err (should-error (mole-populate-empty-table prods))))
+    (should (string-match-p "recursive" (cadr err)))))
+
+(ert-deftest mole-auto-recursion-detect ()
+  "Check that `mole-populate-empty-table' detects left-recursion on itself."
+  (let* ((prods '((a "" a)))
+         (err (should-error (mole-populate-empty-table prods))))
+    (should (string-match-p "recursive" (cadr err)))))
+
+(defun mole-test-empty-table (prods exp)
+  "Test the building of the matches-empty-p cache.
+PRODS is the alist of productions to consume, and EXP is a list
+of (prod-name t) or (prod-name nil) values.  Only productions in
+EXP are checked, all others are ignored."
+  (let* ((res (mole-populate-empty-table prods)) res-alist)
+    (dolist (e exp)
+      (push (list (car e) (gethash (car e) res 'not-found)) res-alist))
+    (setq res-alist (nreverse res-alist))
+    (should (equal res-alist exp))))
+
+(ert-deftest mole-matches-empty-string ()
+  (mole-test-empty-table '((a "") (b "x")) '((a t) (b nil))))
+
+(ert-deftest mole-matches-empty-symbol ()
+  (mole-test-empty-table '((a b) (b "") (c d) (d "x")) '((a t) (c nil))))
+
+(ert-deftest mole-matches-empty-char ()
+  (mole-test-empty-table '((a (char ?a))) '((a nil))))
+
+(ert-deftest mole-matches-empty-char-not ()
+  (mole-test-empty-table '((a (char-not ?a))) '((a nil))))
+
+(ert-deftest mole-matches-empty-: ()
+  (mole-test-empty-table '((a (: "" "")) (b (: "" "x"))) '((a t) (b nil))))
+
+(ert-deftest mole-matches-empty-or ()
+  (mole-test-empty-table '((a (or "xyz" ""))) '((a t))))
+
+(ert-deftest mole-matches-empty-* ()
+  (mole-test-empty-table '((a (* "x"))) '((a t))))
+
+(ert-deftest mole-matches-empty-+ ()
+  (mole-test-empty-table '((a (+ "x")) (b (+ ""))) '((a nil) (b t))))
+
+(ert-deftest mole-matches-empty-opt ()
+  (mole-test-empty-table '((a (\? "x")) (b (opt "x"))) '((a t) (b t))))
+
+(ert-deftest mole-matches-empty-= ()
+  (mole-test-empty-table '((a (\?= "x")) (b (= "x"))) '((a t) (b t))))
+
+(ert-deftest mole-matches-empty-! ()
+  (mole-test-empty-table '((a (\?! "x")) (b (! "x"))) '((a t) (b t))))
+
+(ert-deftest mole-matches-empty-repetition ()
+  (mole-test-empty-table '((a (0 "x")) (b (0 2 "x")) (c (1 "y")) (d (1 3 "y")) (e (1 "")) (f (2 4 "")))
+                         '((a t) (b t) (c nil) (d nil) (e t) (f t))))
+
+(ert-deftest mole-matches-empty-lexical ()
+  (mole-test-empty-table '((a (lexical "" "")) (b (lexical "" "x"))) '((a t) (b nil))))
+
+(ert-deftest mole-matches-empty-with-context ()
+  (mole-test-empty-table '((a (with-context (c 1) "" "")) (b (with-context (c 1) "" "x")))
+                         '((a t) (b nil))))
+
+(ert-deftest mole-matches-empty-if-context ()
+  (mole-test-empty-table '((a (if-context (c 1) "" "")) (b (if-context (c 1) "" "x")))
+                         '((a t) (b nil))))
+
+(ert-deftest mole-matches-empty-extern ()
+  (mole-test-empty-table '((a (extern mole-extern-test-fn 1 b))
+                           (b (extern (lambda () 'fail))))
+                         '((a t) (b t))))
+
+(ert-deftest mole-matches-empty-parametric ()
+  (should nil))
 
 (provide 'mole-tests)
 ;;; mole-test.el ends here

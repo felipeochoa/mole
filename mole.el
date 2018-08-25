@@ -708,6 +708,127 @@ parametric production (one defined with `:params')."
         (push elt res)))
     (nreverse res)))
 
+(defun mole-count-args (arg-list)
+  "Return a (min . max) pair of argument counts matching ARG-LIST.
+Only handles &optional and &rest annotations."
+  (cl-block mole-count-args
+    (let (min (i 0))
+      (dolist (arg arg-list)
+        (pcase arg
+          ('&optional (setq min i))
+          ('&rest (cl-return-from mole-count-args (cons (or min i) nil)))
+          (_ (cl-incf i))))
+      (cons (or min i) i))))
+
+(defun mole-bind-args (arg-list call-args)
+  "Return an alist of (arg . value) bindings.
+The bindings correspond to what would be bound if calling a
+function with ARG-LIST with CALL-ARGS."
+  (apply `(lambda ,arg-list
+            (list ,@(mapcar (lambda (a) `(list ',a ,a))
+                            (remq '&rest (remq '&optional arg-list)))))
+         call-args))
+
+(defmacro mole-lazy (&rest body)
+  "Turn BODY into a lazily-evaluated form.
+Use `mole-unlazy' for obtaining the value.  BODY should be pure,
+as the result is cached after the first evaluation."
+  (declare (debug (&rest form)) (indent defun))
+  (let ((called (make-symbol "called"))
+        (res (make-symbol "res")))
+    `(let (,called ,res)
+       (lambda ()
+         (if ,called ,res
+           (setq ,called t
+                 ,res (progn ,@body)))))))
+
+(defalias 'mole-unlazy #'funcall "Force evaluation of a lazy value.")
+
+(defun mole-populate-empty-table (productions)
+  "Build a hashtable mapping PRODUCTIONS to whether they can match empty.
+Productions match empty if they don't advance point on a
+succesful match.  Also check for left-recursive loops and invalid
+parametric production calls."
+  (setq productions (mole--munge-productions-1 productions))
+  (let ((empty-cache (make-hash-table :test #'eq)) call-stack call-args-stack)
+    (cl-labels
+        ((prod-matches-empty
+          (name call-args)
+          (when (memq name call-stack)
+            (error "Detected left-recursive call to %s:\n%S" name call-stack))
+          (push name call-stack)
+          (prog1 (prod-matches-empty-1 name call-args)
+            (pop call-stack)))
+         (prod-matches-empty-1
+          (name call-args)
+          (cl-block prod-matches-empty-1
+            (if-let (temp (assq name (car call-args-stack)))
+                (if call-args (error "Parametric arguments are not supported:\n%S" call-stack)
+                  (mole-unlazy (cdr temp)))
+              (cl-destructuring-bind (_ args body)
+                  (or (assq name productions) (error "Unknown production %s:\n%S" name call-stack))
+                ;; Check arg count here to provide friendlier error message
+                (cl-destructuring-bind (min . max) (mole-count-args args)
+                  (let ((arg-count (length call-args)))
+                    (cl-assert (and (>= arg-count min) (or (not max) (<= arg-count max)))
+                               nil "Wrong number of arguments: %s. Exepected %S, got %s:\n%S"
+                               name (cons min max) arg-count call-stack)))
+                (unless args
+                  (let ((cached (gethash name empty-cache 'not-found)))
+                    (unless (eq cached 'not-found)
+                      (cl-return-from prod-matches-empty-1 cached))))
+                (push (mole-bind-args
+                       args
+                       (mapcar (lambda (term)
+                                 (if (or (eq (car-safe term) 'quote) (functionp term))
+                                     (mole-lazy (error "Quoted param can only be used with 'extern"))
+                                   ;; TODO: Correctly handle case when call-args refer to the
+                                   ;; calling productions call args
+                                   (mole-lazy (term-matches-empty term))))
+                               call-args))
+                      call-args-stack)
+                (let ((res (cl-every #'term-matches-empty body)))
+                  (pop call-args-stack)
+                  (unless args (setf (gethash name empty-cache) res))
+                  res)))))
+
+         (term-matches-empty
+          (production)
+          (cond
+           ((symbolp production) (prod-matches-empty production nil))
+           ((stringp production) (zerop (length production)))
+           ((consp production)
+            (pcase (car production)
+              ((or '* '\? 'opt '\?! '! '\?= '=) t)
+              ((or 'char 'char-not '\`) nil)
+              ((or ': '+ 'lexical) (cl-every #'term-matches-empty (cdr production)))
+              ((or 'with-context 'if-context)
+               ;; There may be some false-positives in the cycle detection here since we don't
+               ;; account for context changing. E.g.,
+               ;; ((a (or (if-context (c 1) b) "x"))
+               ;;  (b (if-context (c 1) (with-context (c 2) a))))
+               (cl-every #'term-matches-empty (cddr production)))
+              ('or (cl-some #'term-matches-empty (cdr production)))
+              ('extern
+               (dolist (arg (cddr production))
+                 (when (symbolp arg)
+                   (term-matches-empty arg)))
+              ;; Conservatively assume extern can match empty.
+              ;; TODO: Allow annotations to determine whether production matches or not
+               t)
+              ((pred numberp)
+               (or (zerop (car production))
+                   (cl-every #'term-matches-empty (if (numberp (cadr production))
+                                                      (cddr production)
+                                                    (cdr production)))))
+              ((pred symbolp) (prod-matches-empty (car production) (cdr production)))
+              (_ (error "Unknown production %S" production))))
+           (t (error "Unknown production %S" production)))))
+      (dolist (prod productions)
+        (unless (plist-get (cadr prod) :params)
+          (prod-matches-empty (car prod) nil))))
+    empty-cache))
+
 (defun mole-munge-production-name (prod)
   "Munge symbol PROD so that it does not conflict with existing variables.
 Mole grammars let-bind productions, so if production names
